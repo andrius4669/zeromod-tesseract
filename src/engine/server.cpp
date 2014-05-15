@@ -3,6 +3,8 @@
 
 #include "engine.h"
 
+volatile bool reloadcfg = false, quitserver = false;
+
 #define LOGSTRLEN 512
 
 static FILE *logfile = NULL;
@@ -1010,11 +1012,35 @@ void logoutfv(const char *fmt, va_list args)
     if(f) writelogv(f, fmt, args);
 }
 
+void signalhandler(int signum)
+{
+    switch(signum)
+    {
+        case SIGTERM:
+        case SIGINT:
+            quitserver = true;
+            break;
+        case SIGHUP:
+        case SIGUSR1:
+            reloadcfg = true;
+            break;
+    }
+}
+
 #endif
 
 static bool dedicatedserver = false;
 
 bool isdedicatedserver() { return dedicatedserver; }
+
+void stopdedicatedserver()
+{
+    logoutf("dedicated server stopped, disconnecting clients...");
+    kicknonlocalclients();
+    if(serverhost) enet_host_flush(serverhost);
+    cleanupserver();
+    closelogfile();
+}
 
 void rundedicatedserver()
 {
@@ -1027,14 +1053,26 @@ void rundedicatedserver()
         MSG msg;
         while(PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
         {
-            if(msg.message == WM_QUIT) exit(EXIT_SUCCESS);
+            if(msg.message == WM_QUIT) { quitserver = true; break; }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
+        if(quitserver) { stopdedicatedserver(); exit(EXIT_SUCCESS); }
+        if(reloadcfg) { reloadcfg = false; logoutf("reloading server configuration"); execfile("config/server-init.cfg", false); }
         serverslice(true, 5);
     }
 #else
-    for(;;) serverslice(true, 5);
+    signal(SIGTERM, signalhandler);
+    signal(SIGINT,  signalhandler);
+    signal(SIGHUP,  signalhandler);
+    signal(SIGUSR1, signalhandler);
+    signal(SIGUSR2, signalhandler);
+    for(;;)
+    {
+        if(quitserver) { stopdedicatedserver(); exit(EXIT_SUCCESS); }
+        if(reloadcfg) { reloadcfg = false; logoutf("reloading server configuration"); execfile("config/server-init.cfg", false); }
+        serverslice(true, 5);
+    }
 #endif
     dedicatedserver = false;
 }
