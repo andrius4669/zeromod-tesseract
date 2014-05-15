@@ -29,6 +29,8 @@ VAR(geoip_show_ip, 0, 2, 2);
 VAR(geoip_show_city, 0, 0, 2);
 VAR(geoip_show_region, 0, 0, 2);
 VAR(geoip_show_country, 0, 1, 2);
+VAR(geoip_show_continent, 0, 0, 2);
+VAR(geoip_skip_duplicates, 0, 1, 1);
 SVAR(geoip_color_scheme, "707");
 
 static const struct
@@ -76,6 +78,20 @@ void z_init_geoip()
 #endif //USE_GEOIP
 }
 
+#ifdef USE_GEOIP
+static const char *z_geoip_decode_continent(const char *cont)
+{
+    /**/ if(!cont) /***********/ return(NULL);
+    else if(!strcmp(cont, "AF")) return("Africa");
+    else if(!strcmp(cont, "AS")) return("Asia");
+    else if(!strcmp(cont, "EU")) return("Europe");
+    else if(!strcmp(cont, "NA")) return("North America");
+    else if(!strcmp(cont, "OC")) return("Oceania");
+    else if(!strcmp(cont, "SA")) return("South America");
+    else /*********************/ return(NULL);
+}
+#endif
+
 void z_geoip_resolveclient(clientinfo *ci)
 {
     if(!geoip_enable || !ci) return;
@@ -96,22 +112,37 @@ void z_geoip_resolveclient(clientinfo *ci)
 #ifdef USE_GEOIP
     uchar buf[MAXSTRLEN];
     size_t len;
-    if(geoip_show_country && z_gi)
+    if(z_gi && (geoip_show_continent || geoip_show_country))
     {
         // const char *country = GeoIP_country_name_by_ipnum(z_gi, ip); // depricated
         GeoIPLookup gl;
-        const char *country = GeoIP_country_name_by_ipnum_gl(z_gi, ip, &gl);
-        if(country)
+        int country_id = GeoIP_id_by_ipnum_gl(z_gi, ip, &gl);
+        if(geoip_show_continent)
         {
-            len = decodeutf8(buf, sizeof(buf)-1, (const uchar *)country, strlen(country));
-            if(len > 0) { buf[len] = '\0'; ci->geoip_country = newstring((const char *)buf); }
+            const char *continent = z_geoip_decode_continent(GeoIP_continent_by_id(country_id));
+            if(continent) ci->geoip_continent = newstring(continent);
+        }
+        if(geoip_show_country)
+        {
+            const char *country = GeoIP_country_name_by_id(z_gi, country_id);
+            if(country)
+            {
+                len = decodeutf8(buf, sizeof(buf)-1, (const uchar *)country, strlen(country));
+                if(len > 0) { buf[len] = '\0'; ci->geoip_country = newstring((const char *)buf); }
+            }
         }
     }
-    if((geoip_show_region || geoip_show_city || (geoip_show_country && !ci->geoip_country)) && z_gic)
+    if(z_gic && (geoip_show_city || geoip_show_region || (geoip_show_country && !ci->geoip_country) ||
+        (geoip_show_continent && !ci->geoip_continent)))
     {
         GeoIPRecord *gir = GeoIP_record_by_ipnum(z_gic, ip);
         if(gir)
         {
+            if(geoip_show_continent && !ci->geoip_continent)
+            {
+                const char *continent = z_geoip_decode_continent(gir->continent_code);
+                if(continent) ci->geoip_continent = newstring(continent);
+            }
             if(geoip_show_country && !ci->geoip_country)        // country_name is always filled
             {
                 len = decodeutf8(buf, sizeof(buf)-1, (const uchar *)gir->country_name, strlen(gir->country_name));
@@ -150,15 +181,24 @@ void z_geoip_show(clientinfo *ci)
     
     string ncstr, acstr;
     ncstr[0] = acstr[0] = '\0';
-    const char *components[] = { getclienthostname(ci->clientnum), ci->geoip_city, ci->geoip_region, ci->geoip_country };
-    int en_components[] = { geoip_show_ip, geoip_show_city, geoip_show_region, geoip_show_country };
-    loopi(sizeof(components)/sizeof(components[0])) loopj(2)
+    const char *components[] = { getclienthostname(ci->clientnum), ci->geoip_city, ci->geoip_region, ci->geoip_country, ci->geoip_continent };
+    bool n_components[] = { geoip_show_ip == 1, geoip_show_city == 1, geoip_show_region == 1, geoip_show_country == 1, geoip_show_continent == 1 };
+    bool a_components[] = { geoip_show_ip != 0, geoip_show_city != 0, geoip_show_region != 0, geoip_show_country != 0, geoip_show_continent != 0 };
+    loopi(2)
     {
-        char *s = j ? acstr : ncstr;
-        if((j ? en_components[i] : en_components[i] == 1) && components[i])
+        bool *comp = i ? n_components : a_components;
+        char *buf = i ? ncstr : acstr;
+        int lastc = -1;
+        loopj(sizeof(components)/sizeof(components[0]))
         {
-            if(s[0]) concatstring(s, ", ");
-            concatstring(s, components[i]);
+            const char *str = comp[j] ? components[j] : NULL;
+            if(str)
+            {
+                if(geoip_skip_duplicates && lastc >= 0 && !strcmp(str, components[lastc])) continue;
+                lastc = j;
+                if(buf[0]) concatstring(buf, ", ");
+                concatstring(buf, str);
+            }
         }
     }
     

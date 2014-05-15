@@ -230,10 +230,10 @@ namespace server
         void *authchallenge;
         int authkickvictim;
         char *authkickreason;
-        char *geoip_country, *geoip_region, *geoip_city;
+        char *geoip_country, *geoip_region, *geoip_city, *geoip_continent;
 
         clientinfo() : getdemo(NULL), getmap(NULL), clipboard(NULL), authchallenge(NULL), authkickreason(NULL),
-            geoip_country(NULL), geoip_region(NULL), geoip_city(NULL) { reset(); }
+            geoip_country(NULL), geoip_region(NULL), geoip_city(NULL), geoip_continent(NULL) { reset(); }
         ~clientinfo() { events.deletecontents(); cleanclipboard(); cleanauth(); cleangeoip(); }
 
         void addevent(gameevent *e)
@@ -328,6 +328,7 @@ namespace server
         
         void cleangeoip()
         {
+            DELETEA(geoip_continent);
             DELETEA(geoip_country);
             DELETEA(geoip_region);
             DELETEA(geoip_city);
