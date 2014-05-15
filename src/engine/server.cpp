@@ -712,6 +712,15 @@ void serverslice(bool dedicated, uint timeout)   // main server update, called f
     if(server::sendpackets()) enet_host_flush(serverhost);
 }
 
+void stopdedicatedserver()
+{
+    logoutf("dedicated server stopped, disconnecting clients...");
+    kicknonlocalclients();
+    if(serverhost) enet_host_flush(serverhost);
+    cleanupserver();
+    closelogfile();
+}
+
 void flushserver(bool force)
 {
     if(server::sendpackets(force) && serverhost) enet_host_flush(serverhost);
@@ -820,6 +829,7 @@ static BOOL WINAPI consolehandler(DWORD dwCtrlType)
         case CTRL_C_EVENT:
         case CTRL_BREAK_EVENT:
         case CTRL_CLOSE_EVENT:
+            stopdedicatedserver();
             exit(EXIT_SUCCESS);
             return TRUE;
     }
@@ -862,6 +872,7 @@ enum
     MENU_OPENCONSOLE = 0,
     MENU_SHOWCONSOLE,
     MENU_HIDECONSOLE,
+    MENU_RELOADCFG,
     MENU_EXIT
 };
 
@@ -901,6 +912,9 @@ static LRESULT CALLBACK handlemessages(HWND hWnd, UINT uMsg, WPARAM wParam, LPAR
                     ShowWindow(conwindow, SW_HIDE);
                     ModifyMenu(appmenu, 0, MF_BYPOSITION|MF_STRING, MENU_SHOWCONSOLE, "Show Console");
                     break;
+                case MENU_RELOADCFG:
+                    reloadcfg = true;
+                    break;
                 case MENU_EXIT:
                     PostMessage(hWnd, WM_CLOSE, 0, 0);
                     break;
@@ -924,6 +938,7 @@ static void setupwindow(const char *title)
     appmenu = CreatePopupMenu();
     if(!appmenu) fatal("failed creating popup menu");
     AppendMenu(appmenu, MF_STRING, MENU_OPENCONSOLE, "Open Console");
+    AppendMenu(appmenu, MF_STRING, MENU_RELOADCFG, "Reload configuration");
     AppendMenu(appmenu, MF_SEPARATOR, 0, NULL);
     AppendMenu(appmenu, MF_STRING, MENU_EXIT, "Exit");
     //SetMenuDefaultItem(appmenu, 0, FALSE);
@@ -1032,15 +1047,6 @@ void signalhandler(int signum)
 static bool dedicatedserver = false;
 
 bool isdedicatedserver() { return dedicatedserver; }
-
-void stopdedicatedserver()
-{
-    logoutf("dedicated server stopped, disconnecting clients...");
-    kicknonlocalclients();
-    if(serverhost) enet_host_flush(serverhost);
-    cleanupserver();
-    closelogfile();
-}
 
 void rundedicatedserver()
 {
