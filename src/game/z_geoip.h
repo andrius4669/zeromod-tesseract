@@ -38,16 +38,16 @@ static const struct
 } reservedips[] =
 {
     // localhost
-    { 0x0000007F, 0x000000FF, "localhost" },            // 127.0.0.0/8
+    { 0x7F000000, 0xFF000000, "localhost" },            // 127.0.0.0/8
     // lan
-    { 0x0000A8C0, 0x0000FFFF, "Local Area Network" },   // 192.168.0.0/16
-    { 0x0000000A, 0x000000FF, "Local Area Network" },   // 10.0.0.0/8
-    { 0x00004064, 0x0000C0FF, "Local Area Network" },   // 100.64.0.0/10
-    { 0x000010AC, 0x0000F0FF, "Local Area Network" },   // 172.16.0.0/12
-    { 0x000000C0, 0xF8FFFFFF, "Local Area Network" },   // 192.0.0.0/29
-    { 0x000012C6, 0x0000FEFF, "Local Area Network" },   // 198.18.0.0/15
+    { 0xC0A80000, 0xFFFF0000, "Local Area Network" },   // 192.168.0.0/16
+    { 0x0A000000, 0xFF000000, "Local Area Network" },   // 10.0.0.0/8
+    { 0x64400000, 0xFFC00000, "Local Area Network" },   // 100.64.0.0/10
+    { 0xAC100000, 0xFFF00000, "Local Area Network" },   // 172.16.0.0/12
+    { 0xC0000000, 0xFFFFFFF8, "Local Area Network" },   // 192.0.0.0/29
+    { 0xC6120000, 0xFFFE0000, "Local Area Network" },   // 198.18.0.0/15
     // autoconfigured lan
-    { 0x0000FEA9, 0x0000FFFF, "Local Area Network" }    // 169.254.0.0/16
+    { 0xA9FE0000, 0xFFFF0000, "Local Area Network" }    // 169.254.0.0/16
 };
 
 void z_init_geoip()
@@ -81,7 +81,7 @@ void z_geoip_resolveclient(clientinfo *ci)
     if(!geoip_enable || !ci) return;
     z_init_geoip();
     ci->cleangeoip();
-    uint ip = getclientip(ci->clientnum);
+    uint ip = ENET_NET_TO_HOST_32(getclientip(ci->clientnum));
     if(!ip) return;
     loopi(sizeof(reservedips)/sizeof(reservedips[0]))
     {
