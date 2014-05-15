@@ -1027,6 +1027,7 @@ void logoutfv(const char *fmt, va_list args)
     if(f) writelogv(f, fmt, args);
 }
 
+#include <signal.h>
 void signalhandler(int signum)
 {
     switch(signum)
