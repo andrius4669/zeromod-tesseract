@@ -454,8 +454,8 @@ VARFP(reducefilter, 0, 1, 1, initwarning("texture quality", INIT_LOAD));
 VARFP(texreduce, 0, 0, 12, initwarning("texture quality", INIT_LOAD));
 VARFP(texcompress, 0, 1536, 1<<12, initwarning("texture quality", INIT_LOAD));
 VARFP(texcompressquality, -1, -1, 1, setuptexcompress());
-VARFP(trilinear, 0, 1, 1, initwarning("texture filtering", INIT_LOAD));
-VARFP(bilinear, 0, 1, 1, initwarning("texture filtering", INIT_LOAD));
+VARF(trilinear, 0, 1, 1, initwarning("texture filtering", INIT_LOAD));
+VARF(bilinear, 0, 1, 1, initwarning("texture filtering", INIT_LOAD));
 VARFP(aniso, 0, 0, 16, initwarning("texture filtering", INIT_LOAD));
 
 extern int usetexcompress;
@@ -1929,6 +1929,7 @@ void texture(char *type, char *name, int *rot, int *xoffset, int *yoffset, float
     {
         tnum = TEX_DIFFUSE;
         defslot = &materialslots[matslot];
+        defslot->reset(); 
     }
     else if(!defslot) return;
     else if(tnum < 0) tnum = TEX_UNKNOWN;
