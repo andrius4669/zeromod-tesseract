@@ -231,6 +231,8 @@ namespace server
         int authkickvictim;
         char *authkickreason;
         char *geoip_country, *geoip_region, *geoip_city, *geoip_continent;
+        bool chatmute, specmute, editmute;
+        int lastchat, lastedit;
 
         clientinfo() : getdemo(NULL), getmap(NULL), clipboard(NULL), authchallenge(NULL), authkickreason(NULL),
             geoip_country(NULL), geoip_region(NULL), geoip_city(NULL), geoip_continent(NULL) { reset(); }
@@ -351,6 +353,8 @@ namespace server
             cleanclipboard();
             cleanauth();
             cleangeoip();
+            chatmute = specmute = editmute = false;
+            lastchat = lastedit = 0;
             mapchange();
         }
 
@@ -1264,7 +1268,7 @@ namespace server
     };
     hashset<userinfo> users;
 
-    void adduser(char *name, char *desc, char *pubkey, const char *priv)
+    void adduser(char *name, char *desc, const char *pubkey, const char *priv)
     {
         userkey key(name, desc);
         userinfo &u = users[key];
@@ -1278,9 +1282,6 @@ namespace server
             case 'm': case 'M': default: u.privilege = PRIV_AUTH; break;
         }
     }
-    /*
-    COMMAND(adduser, "ssss");
-    */
     ICOMMAND(adduser, "ssssN", (char *s0, char *s1, char *s2, char *s3, int *numargs),
     {
         if(*numargs > 2) adduser(s0, s1, s2, s3);
@@ -2356,7 +2357,7 @@ namespace server
         if(smode) smode->leavegame(ci);
         ci->state.state = CS_SPECTATOR;
         ci->state.timeplayed += lastmillis - ci->state.lasttimeplayed;
-        if(!ci->local && !ci->privilege) aiman::removeai(ci);
+        if(!ci->local && (!ci->privilege || ci->warned)) aiman::removeai(ci);
         sendf(-1, 1, "ri3", N_SPECTATOR, ci->clientnum, 1);
     }
 
@@ -2419,7 +2420,7 @@ namespace server
                 if(req < 0) ci->warned = true;
             }
         }
-        if(modifiedmapspectator && (mcrc || modifiedmapspectator > 1)) loopv(clients)
+        if(req < 0 && modifiedmapspectator && (mcrc || modifiedmapspectator > 1)) loopv(clients)
         {
             clientinfo *ci = clients[i];
             if(!ci->local && ci->warned && ci->state.state != CS_SPECTATOR) forcespectator(ci);
@@ -2740,7 +2741,7 @@ namespace server
     }
 
     #include "z_geoip.h"
-    
+
     void connected(clientinfo *ci)
     {
         if(m_demo) enddemoplayback();
@@ -2773,6 +2774,8 @@ namespace server
 
         if(servermotd[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, servermotd);
     }
+
+    #include "z_msgfilter.h"
 
     void parsepacket(int sender, int chan, packetbuf &p)     // has to parse exactly each byte of the packet
     {
@@ -2941,6 +2944,7 @@ namespace server
                 int val = getint(p);
                 if(!ci->local && !m_edit) break;
                 if(val ? ci->state.state!=CS_ALIVE && ci->state.state!=CS_DEAD : ci->state.state!=CS_EDITING) break;
+                if(!allowmsg(ci, cm, type)) break;
                 if(smode)
                 {
                     if(val) smode->leavegame(ci);
@@ -2976,6 +2980,7 @@ namespace server
                 copystring(ci->clientmap, text);
                 ci->mapcrc = text[0] ? crc : 1;
                 checkmaps();
+                if(cq && cq != ci && cq->ownernum != ci->clientnum) cq = NULL;
                 break;
             }
 
@@ -2989,6 +2994,8 @@ namespace server
                 {
                     ci->mapcrc = -1;
                     checkmaps();
+                    if(ci == cq) { if(ci->state.state != CS_DEAD) break; }
+                    else if(cq->ownernum != ci->clientnum) { cq = NULL; break; }
                 }
                 if(cq->state.deadflush)
                 {
@@ -3094,10 +3101,11 @@ namespace server
 
             case N_TEXT:
             {
-                QUEUE_AI;
-                QUEUE_MSG;
                 getstring(text, p);
+                if(!allowmsg(ci, cq, type)) break;
                 filtertext(text, text);
+                QUEUE_AI;
+                QUEUE_INT(type);
                 QUEUE_STR(text);
                 if(isdedicatedserver() && cq) logoutf("%s: %s", colorname(cq), text);
                 break;
@@ -3107,6 +3115,8 @@ namespace server
             {
                 getstring(text, p);
                 if(!ci || !cq || (ci->state.state==CS_SPECTATOR && !ci->local && !ci->privilege) || !m_teammode || !validteam(cq->team)) break;
+                if(!allowmsg(ci, cq, type)) break;
+                filtertext(text, text);
                 loopv(clients)
                 {
                     clientinfo *t = clients[i];
@@ -3119,10 +3129,11 @@ namespace server
 
             case N_SWITCHNAME:
             {
-                QUEUE_MSG;
                 getstring(text, p);
+                if(!allowmsg(ci, cm, type)) break;
                 filtertext(ci->name, text, false, MAXNAMELEN);
                 if(!ci->name[0]) copystring(ci->name, "unnamed");
+                QUEUE_INT(type);
                 QUEUE_STR(ci->name);
                 break;
             }
@@ -3146,6 +3157,7 @@ namespace server
                 int team = getint(p);
                 if(m_teammode && validteam(team) && ci->team != team && (!smode || smode->canchangeteam(ci, ci->team, team)))
                 {
+                    if(!allowmsg(ci, ci, type)) break;
                     if(ci->state.state==CS_ALIVE) suicide(ci);
                     ci->team = team;
                     aiman::changeteam(ci);
@@ -3215,7 +3227,7 @@ namespace server
                     case ID_FVAR: getfloat(p); break;
                     case ID_SVAR: getstring(text, p);
                 }
-                if(ci && ci->state.state!=CS_SPECTATOR) QUEUE_MSG;
+                if(ci && ci->state.state!=CS_SPECTATOR && allowmsg(ci, cm, N_EDITVAR)) QUEUE_MSG;
                 break;
             }
 
@@ -3281,12 +3293,14 @@ namespace server
             case N_SPECTATOR:
             {
                 int spectator = getint(p), val = getint(p);
-                if(!ci->privilege && !ci->local && (spectator!=sender || (ci->state.state==CS_SPECTATOR && mastermode>=MM_LOCKED))) break;
+                if(!ci->privilege && !ci->local && (spectator!=sender || (ci->state.state==CS_SPECTATOR && (mastermode>=MM_LOCKED || ci->specmute)))) break;
                 clientinfo *spinfo = (clientinfo *)getclientinfo(spectator); // no bots
                 if(!spinfo || !spinfo->connected || (spinfo->state.state==CS_SPECTATOR ? val : !val)) break;
 
                 if(spinfo->state.state!=CS_SPECTATOR && val) forcespectator(spinfo);
                 else if(spinfo->state.state==CS_SPECTATOR && !val) unspectate(spinfo);
+
+                if(cq && cq != ci && cq->ownernum != ci->clientnum) cq = NULL;
                 break;
             }
 
@@ -3368,6 +3382,7 @@ namespace server
             {
                 int size = getint(p);
                 if(!ci->privilege && !ci->local && ci->state.state==CS_SPECTATOR) break;
+                if(!allowmsg(ci, cm, type)) break;
                 if(size>=0)
                 {
                     smapname[0] = '\0';
@@ -3485,14 +3500,14 @@ namespace server
                 goto genericmsg;
 
             case N_PASTE:
-                if(ci->state.state!=CS_SPECTATOR) sendclipboard(ci);
+                if(ci->state.state!=CS_SPECTATOR && allowmsg(ci, cq, type)) sendclipboard(ci);
                 goto genericmsg;
 
             case N_CLIPBOARD:
             {
                 int unpacklen = getint(p), packlen = getint(p);
                 ci->cleanclipboard(false);
-                if(ci->state.state==CS_SPECTATOR)
+                if(ci->state.state==CS_SPECTATOR || !allowmsg(ci, ci, type))
                 {
                     if(packlen > 0) p.subbuf(packlen);
                     break;
@@ -3534,7 +3549,7 @@ namespace server
                 int size = server::msgsizelookup(type);
                 if(size<=0) { disconnect_client(sender, DISC_MSGERR); return; }
                 loopi(size-1) getint(p);
-                if(ci && cq && (ci != cq || ci->state.state!=CS_SPECTATOR)) { QUEUE_AI; QUEUE_MSG; }
+                if(ci && cq && (ci != cq || (ci->state.state!=CS_SPECTATOR && allowmsg(ci, cq, type)))) { QUEUE_AI; QUEUE_MSG; }
                 break;
             }
         }
