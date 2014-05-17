@@ -2776,6 +2776,7 @@ namespace server
     }
 
     #include "z_msgfilter.h"
+    #include "z_servcmd.h"
 
     void parsepacket(int sender, int chan, packetbuf &p)     // has to parse exactly each byte of the packet
     {
@@ -3102,6 +3103,8 @@ namespace server
             case N_TEXT:
             {
                 getstring(text, p);
+                char *cmd = z_servcmd_check(text);
+                if(cmd) { z_servcmd_parse(sender, cmd); break; }
                 if(!allowmsg(ci, cq, type)) break;
                 filtertext(text, text);
                 QUEUE_AI;
@@ -3530,6 +3533,7 @@ namespace server
 
             case N_SERVCMD:
                 getstring(text, p);
+                if(text[0]) z_servcmd_parse(sender, text);
                 break;
 
             #define PARSEMESSAGES 1
@@ -3591,5 +3595,7 @@ namespace server
     int protocolversion() { return PROTOCOL_VERSION; }
 
     #include "aiman.h"
+
+    #include "z_genericservercommands.h"
 }
 
