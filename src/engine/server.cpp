@@ -182,6 +182,7 @@ void cleanupserver()
 
 VARF(maxclients, 0, DEFAULTCLIENTS, MAXCLIENTS, { if(!maxclients) maxclients = DEFAULTCLIENTS; });
 VARF(maxdupclients, 0, 0, MAXCLIENTS, { if(serverhost) serverhost->duplicatePeers = maxdupclients ? maxdupclients : MAXCLIENTS; });
+VAR(maxpeers, 0, 0, MAXCLIENTS);
 
 void process(ENetPacket *packet, int sender, int chan);
 //void disconnect_client(int n, int reason);
@@ -327,14 +328,8 @@ void disconnect_client(int n, int reason)
 {
     if(!clients.inrange(n) || clients[n]->type!=ST_TCPIP) return;
     enet_peer_disconnect(clients[n]->peer, reason);
-    server::clientdisconnect(n);
+    server::clientdisconnect(n, true, reason);
     delclient(clients[n]);
-    const char *msg = disconnectreason(reason);
-    string s;
-    if(msg) formatstring(s, "client (%s) disconnected because: %s", clients[n]->hostname, msg);
-    else formatstring(s, "client (%s) disconnected", clients[n]->hostname);
-    logoutf("%s", s);
-    server::sendservmsg(s);
 }
 
 void kicknonlocalclients(int reason)
@@ -368,6 +363,8 @@ int connectwithtimeout(ENetSocket sock, const char *hostname, const ENetAddress 
 }
 #endif
 
+#include "z_ms_engineserver_override.h"
+#if 0
 ENetSocket mastersock = ENET_SOCKET_NULL;
 ENetAddress masteraddress = { ENET_HOST_ANY, ENET_PORT_ANY }, serveraddress = { ENET_HOST_ANY, ENET_PORT_ANY };
 int lastupdatemaster = 0, lastconnectmaster = 0, masterconnecting = 0, masterconnected = 0;
@@ -520,6 +517,7 @@ void flushmasterinput()
     }
     else disconnectmaster();
 }
+#endif
 
 static ENetAddress serverinfoaddress;
 
@@ -539,11 +537,12 @@ void checkserversockets()        // reply all server info requests
     ENET_SOCKETSET_EMPTY(readset);
     ENET_SOCKETSET_EMPTY(writeset);
     ENetSocket maxsock = ENET_SOCKET_NULL;
-    if(mastersock != ENET_SOCKET_NULL)
+    loopv(mss) if(mss[i].mastersock != ENET_SOCKET_NULL)
     {
+        ENetSocket mastersock = mss[i].mastersock;
         maxsock = maxsock == ENET_SOCKET_NULL ? mastersock : max(maxsock, mastersock);
         ENET_SOCKETSET_ADD(readset, mastersock);
-        if(!masterconnected) ENET_SOCKETSET_ADD(writeset, mastersock);
+        if(!mss[i].masterconnected) ENET_SOCKETSET_ADD(writeset, mastersock);
     }
     if(lansock != ENET_SOCKET_NULL)
     {
@@ -565,27 +564,27 @@ void checkserversockets()        // reply all server info requests
         server::serverinforeply(req, p);
     }
 
-    if(mastersock != ENET_SOCKET_NULL)
+    loopv(mss) if(mss[i].mastersock != ENET_SOCKET_NULL)
     {
-        if(!masterconnected)
+        if(!mss[i].masterconnected)
         {
-            if(ENET_SOCKETSET_CHECK(readset, mastersock) || ENET_SOCKETSET_CHECK(writeset, mastersock))
+            if(ENET_SOCKETSET_CHECK(readset, mss[i].mastersock) || ENET_SOCKETSET_CHECK(writeset, mss[i].mastersock))
             {
                 int error = 0;
-                if(enet_socket_get_option(mastersock, ENET_SOCKOPT_ERROR, &error) < 0 || error)
+                if(enet_socket_get_option(mss[i].mastersock, ENET_SOCKOPT_ERROR, &error) < 0 || error)
                 {
-                    logoutf("could not connect to master server");
-                    disconnectmaster();
+                    logoutf("could not connect to master server (%s)", mss[i].mastername);
+                    mss[i].disconnectmaster();
                 }
                 else
                 {
-                    masterconnecting = 0;
-                    masterconnected = totalmillis ? totalmillis : 1;
-                    server::masterconnected();
+                    mss[i].masterconnecting = 0;
+                    mss[i].masterconnected = totalmillis ? totalmillis : 1;
+                    server::masterconnected(i);
                 }
             }
         }
-        if(mastersock != ENET_SOCKET_NULL && ENET_SOCKETSET_CHECK(readset, mastersock)) flushmasterinput();
+        if(mss[i].mastersock != ENET_SOCKET_NULL && ENET_SOCKETSET_CHECK(readset, mss[i].mastersock)) mss[i].flushmasterinput();
     }
 }
 
@@ -607,12 +606,14 @@ VARF(serverport, 0, server::serverport(), 0xFFFF, { if(!serverport) serverport =
 int curtime = 0, lastmillis = 0, elapsedtime = 0, totalmillis = 0;
 #endif
 
+#if 0
 void updatemasterserver()
 {
     if(!masterconnected && lastconnectmaster && totalmillis-lastconnectmaster <= 5*60*1000) return;
     if(mastername[0] && allowupdatemaster) requestmasterf("regserv %d\n", serverport);
     lastupdatemaster = totalmillis ? totalmillis : 1;
 }
+#endif
 
 uint totalsecs = 0;
 
@@ -656,8 +657,8 @@ void serverslice(bool dedicated, uint timeout)   // main server update, called f
     flushmasteroutput();
     checkserversockets();
 
-    if(!lastupdatemaster || totalmillis-lastupdatemaster>60*60*1000)       // send alive signal to masterserver every hour of uptime
-        updatemasterserver();
+    loopv(mss) if(!mss[i].lastupdatemaster || totalmillis-mss[i].lastupdatemaster>60*60*1000)   // send alive signal to masterserver every hour of uptime
+        mss[i].updatemasterserver();
 
     if(totalmillis-laststatus>60*1000)   // display bandwidth stats, useful for server ops
     {
@@ -684,7 +685,6 @@ void serverslice(bool dedicated, uint timeout)   // main server update, called f
                 c.peer->data = &c;
                 string hn;
                 copystring(c.hostname, (enet_address_get_host_ip(&c.peer->address, hn, sizeof(hn))==0) ? hn : "unknown");
-                logoutf("client connected (%s)", c.hostname);
                 int reason = server::clientconnect(c.num, c.peer->address.host);
                 if(reason) disconnect_client(c.num, reason);
                 break;
@@ -700,7 +700,6 @@ void serverslice(bool dedicated, uint timeout)   // main server update, called f
             {
                 client *c = (client *)event.peer->data;
                 if(!c) break;
-                logoutf("disconnected client (%s)", c->hostname);
                 server::clientdisconnect(c->num);
                 delclient(c);
                 break;
@@ -1130,6 +1129,8 @@ void initserver(bool listen, bool dedicated)
         setupwindow("Tesseract server");
 #endif
     }
+
+    if(mss.empty()) addms();
 
     execfile("config/server-init.cfg", false);
 

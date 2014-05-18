@@ -52,7 +52,7 @@ static const struct
     { 0xA9FE0000, 0xFFFF0000, "Local Area Network" }    // 169.254.0.0/16
 };
 
-void z_init_geoip()
+static void z_init_geoip()
 {
     if(!geoip_enable) return;
 #ifdef USE_GEOIP
@@ -95,8 +95,8 @@ static const char *z_geoip_decode_continent(const char *cont)
 void z_geoip_resolveclient(clientinfo *ci)
 {
     if(!geoip_enable || !ci) return;
-    z_init_geoip();
     ci->cleangeoip();
+    z_init_geoip();
     uint ip = ENET_NET_TO_HOST_32(getclientip(ci->clientnum));
     if(!ip) return;
     loopi(sizeof(reservedips)/sizeof(reservedips[0]))

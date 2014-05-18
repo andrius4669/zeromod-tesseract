@@ -412,6 +412,7 @@ engine/server.o: shared/ents.h shared/command.h shared/glexts.h
 engine/server.o: shared/glemu.h shared/iengine.h shared/igame.h
 engine/server.o: engine/world.h engine/octa.h engine/light.h engine/texture.h
 engine/server.o: engine/bih.h engine/model.h
+engine/server.o: game/z_ms_engineserver_override.h
 engine/serverbrowser.o: engine/engine.h shared/cube.h shared/tools.h
 engine/serverbrowser.o: shared/geom.h shared/ents.h shared/command.h
 engine/serverbrowser.o: shared/glexts.h shared/glemu.h shared/iengine.h
@@ -475,7 +476,9 @@ game/scoreboard.o: shared/glemu.h shared/iengine.h shared/igame.h game/ai.h
 game/server.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/server.o: shared/ents.h shared/command.h shared/glexts.h shared/glemu.h
 game/server.o: shared/iengine.h shared/igame.h game/ai.h game/ctf.h
-game/server.o: game/z_geoip.h game/z_msgfilter.h game/extinfo.h game/aiman.h
+game/server.o: game/z_ms_gameserver_override.h game/z_geoip.h
+game/server.o: game/z_msgfilter.h game/z_servcmd.h game/z_servercommands.h
+game/server.o: game/extinfo.h game/aiman.h game/z_genericservercommands.h
 game/waypoint.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/waypoint.o: shared/ents.h shared/command.h shared/glexts.h
 game/waypoint.o: shared/glemu.h shared/iengine.h shared/igame.h game/ai.h
@@ -510,6 +513,7 @@ standalone/engine/command.o: shared/iengine.h shared/igame.h engine/world.h
 standalone/engine/server.o: engine/engine.h shared/cube.h shared/tools.h
 standalone/engine/server.o: shared/geom.h shared/ents.h shared/command.h
 standalone/engine/server.o: shared/iengine.h shared/igame.h engine/world.h
+standalone/engine/server.o: game/z_ms_engineserver_override.h
 standalone/engine/worldio.o: engine/engine.h shared/cube.h shared/tools.h
 standalone/engine/worldio.o: shared/geom.h shared/ents.h shared/command.h
 standalone/engine/worldio.o: shared/iengine.h shared/igame.h engine/world.h
@@ -519,8 +523,10 @@ standalone/game/entities.o: shared/iengine.h shared/igame.h game/ai.h
 standalone/game/server.o: game/game.h shared/cube.h shared/tools.h
 standalone/game/server.o: shared/geom.h shared/ents.h shared/command.h
 standalone/game/server.o: shared/iengine.h shared/igame.h game/ai.h
-standalone/game/server.o: game/ctf.h game/z_geoip.h game/z_msgfilter.h
-standalone/game/server.o: game/extinfo.h game/aiman.h
+standalone/game/server.o: game/ctf.h game/z_ms_gameserver_override.h
+standalone/game/server.o: game/z_geoip.h game/z_msgfilter.h game/z_servcmd.h
+standalone/game/server.o: game/z_servercommands.h game/extinfo.h game/aiman.h
+standalone/game/server.o: game/z_genericservercommands.h
 standalone/engine/master.o: shared/cube.h shared/tools.h shared/geom.h
 standalone/engine/master.o: shared/ents.h shared/command.h shared/iengine.h
 standalone/engine/master.o: shared/igame.h

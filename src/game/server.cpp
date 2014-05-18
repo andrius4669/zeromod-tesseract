@@ -226,12 +226,13 @@ namespace server
         int lastclipboard, needclipboard;
         int connectauth;
         uint authreq;
+        int authmaster;
         string authname, authdesc;
         void *authchallenge;
         int authkickvictim;
         char *authkickreason;
         char *geoip_country, *geoip_region, *geoip_city, *geoip_continent;
-        bool chatmute, specmute, editmute;
+        bool chatmute, specmute, editmute, spy;
         int lastchat, lastedit;
 
         clientinfo() : getdemo(NULL), getmap(NULL), clipboard(NULL), authchallenge(NULL), authkickreason(NULL),
@@ -324,6 +325,7 @@ namespace server
         void cleanauth(bool full = true)
         {
             authreq = 0;
+            authmaster = -1;
             if(authchallenge) { freechallenge(authchallenge); authchallenge = NULL; }
             if(full) cleanauthkick();
         }
@@ -353,7 +355,7 @@ namespace server
             cleanclipboard();
             cleanauth();
             cleangeoip();
-            chatmute = specmute = editmute = false;
+            chatmute = specmute = editmute = spy = false;
             lastchat = lastedit = 0;
             mapchange();
         }
@@ -794,6 +796,18 @@ namespace server
         resetitems();
     }
 
+    int numspies(int exclude = -1, bool nospec = true, bool noai = true, bool priv = false)
+    {
+        int n = 0;
+        loopv(clients)
+        {
+            clientinfo *ci = clients[i];
+            if(!ci->spy) continue;
+            if(ci->clientnum!=exclude && (!nospec || ci->state.state!=CS_SPECTATOR || (priv && (ci->privilege || ci->local))) && (!noai || ci->state.aitype == AI_NONE)) n++;
+        }
+        return n;
+    }
+
     int numclients(int exclude = -1, bool nospec = true, bool noai = true, bool priv = false)
     {
         int n = 0;
@@ -802,20 +816,21 @@ namespace server
             clientinfo *ci = clients[i];
             if(ci->clientnum!=exclude && (!nospec || ci->state.state!=CS_SPECTATOR || (priv && (ci->privilege || ci->local))) && (!noai || ci->state.aitype == AI_NONE)) n++;
         }
+        n -= numspies(exclude, nospec, noai, priv);
         return n;
     }
 
     bool duplicatename(clientinfo *ci, char *name)
     {
         if(!name) name = ci->name;
-        loopv(clients) if(clients[i]!=ci && !strcmp(name, clients[i]->name)) return true;
+        loopv(clients) if(clients[i]!=ci && !clients[i]->spy && !strcmp(name, clients[i]->name)) return true;
         return false;
     }
 
     const char *colorname(clientinfo *ci, char *name = NULL)
     {
         if(!name) name = ci->name;
-        if(name[0] && !duplicatename(ci, name) && ci->state.aitype == AI_NONE) return name;
+        if(name[0] && !ci->spy && !duplicatename(ci, name) && ci->state.aitype == AI_NONE) return name;
         static string cname[3];
         static int cidx = 0;
         cidx = (cidx+1)%3;
@@ -2480,15 +2495,19 @@ namespace server
         ci->connectmillis = totalmillis;
         ci->sessionid = (rnd(0x1000000)*((totalmillis%10000)+1))&0xFFFFFF;
 
+        logoutf("connect: client %d (%s) connected", n, getclienthostname(n));
+
         connects.add(ci);
         if(!m_mp(gamemode)) return DISC_LOCAL;
         sendservinfo(ci);
         return DISC_NONE;
     }
 
-    void clientdisconnect(int n)
+    void clientdisconnect(int n, bool forced, int reason)
     {
         clientinfo *ci = getinfo(n);
+        const char *msg = disconnectreason(reason);
+        string s;
         loopv(clients) if(clients[i]->authkickvictim == ci->clientnum) clients[i]->cleanauth();
         if(ci->connected)
         {
@@ -2501,8 +2520,30 @@ namespace server
             aiman::removeai(ci);
             if(!numclients(-1, false, true)) noclients(); // bans clear when server empties
             if(ci->local) checkpausegame();
+            logoutf("disconnect: %s (%d) left", ci->name, ci->clientnum);
+            if(forced)
+            {
+                if(msg) formatstring(s, "client %s (%s) disconnected because: %s", colorname(ci), getclienthostname(n), msg);
+                else formatstring(s, "client %s (%s) disconnected", colorname(ci), getclienthostname(n));
+                sendservmsg(s);
+            }
         }
-        else connects.removeobj(ci);
+        else
+        {
+            connects.removeobj(ci);
+            if(forced)
+            {
+                if(msg) formatstring(s, "client (%s) disconnected because: %s", getclienthostname(n), msg);
+                else formatstring(s, "client (%s) disconnected", getclienthostname(n));
+                sendservmsg(s);
+            }
+        }
+        if(forced)
+        {
+            if(msg) logoutf("disconnect: client %d (%s) disconnected by server because: %s", n, getclienthostname(n), msg);
+            else logoutf("disconnect: client %d (%s) disconnected by server", n, getclienthostname(n));
+        }
+        else logoutf("disconnect: client %d (%s) disconnected", n, getclienthostname(n));
     }
 
     int reserveclients() { return 3; }
@@ -2510,13 +2551,15 @@ namespace server
     struct gbaninfo
     {
         enet_uint32 ip, mask;
+        int master;
     };
 
     vector<gbaninfo> gbans;
 
-    void cleargbans()
+    void cleargbans(int m = -1)
     {
-        gbans.shrink(0);
+        if(m < 0) gbans.shrink(0);
+        else loopvrev(gbans) if(gbans[i].master == m) gbans.removeunordered(i);
     }
 
     bool checkgban(uint ip)
@@ -2525,11 +2568,12 @@ namespace server
         return false;
     }
 
-    void addgban(const char *name)
+    void addgban(int m, const char *name)
     {
         union { uchar b[sizeof(enet_uint32)]; enet_uint32 i; } ip, mask;
         ip.i = 0;
         mask.i = 0;
+        const char *cidr = strchr(name, '/');
         loopi(4)
         {
             char *end = NULL;
@@ -2539,9 +2583,19 @@ namespace server
             name = end;
             while(*name && *name++ != '.');
         }
+        if(cidr && *++cidr)
+        {
+            int n = atoi(cidr);
+            if(n > 0)
+            {
+                for(int i = n; i < 32; i++) mask.b[i/8] &= ~(1 << (7 - (i & 7)));
+                ip.i &= mask.i;
+            }
+        }
         gbaninfo &ban = gbans.add();
         ban.ip = ip.i;
         ban.mask = mask.i;
+        ban.master = m;
 
         loopvrev(clients)
         {
@@ -2575,6 +2629,8 @@ namespace server
         return ci && ci->connected;
     }
 
+    #include "z_ms_gameserver_override.h"
+#if 0
     clientinfo *findauth(uint id)
     {
         loopv(clients) if(clients[i]->authreq == id) return clients[i];
@@ -2711,6 +2767,7 @@ namespace server
         else if(sscanf(cmd, "addgban %100s", val) == 1)
             addgban(val);
     }
+#endif
 
     void receivefile(int sender, uchar *data, int len)
     {
@@ -2767,6 +2824,7 @@ namespace server
 
         aiman::addclient(ci);
 
+        logoutf("connect: %s (%d) joined", ci->name, ci->clientnum);
         z_geoip_resolveclient(ci);
         z_geoip_show(ci);
         
@@ -2776,6 +2834,7 @@ namespace server
     }
 
     #include "z_msgfilter.h"
+    #include "z_servcmd.h"
 
     void parsepacket(int sender, int chan, packetbuf &p)     // has to parse exactly each byte of the packet
     {
@@ -3102,12 +3161,14 @@ namespace server
             case N_TEXT:
             {
                 getstring(text, p);
+                char *cmd = z_servcmd_check(text);
+                if(cmd) { z_servcmd_parse(sender, cmd); break; }
                 if(!allowmsg(ci, cq, type)) break;
                 filtertext(text, text);
                 QUEUE_AI;
                 QUEUE_INT(type);
                 QUEUE_STR(text);
-                if(isdedicatedserver() && cq) logoutf("%s: %s", colorname(cq), text);
+                if(isdedicatedserver() && cq) logoutf("chat: %s (%d): %s", cq->name, cq->clientnum, text);
                 break;
             }
 
@@ -3123,7 +3184,7 @@ namespace server
                     if(t==cq || t->state.state==CS_SPECTATOR || t->state.aitype != AI_NONE || cq->team != t->team) continue;
                     sendf(t->clientnum, 1, "riis", N_SAYTEAM, cq->clientnum, text);
                 }
-                if(isdedicatedserver() && cq) logoutf("%s <%s>: %s", colorname(cq), teamnames[cq->team], text);
+                if(isdedicatedserver() && cq) logoutf("chat: %s (%d) <%s>: %s", cq->name, cq->clientnum, teamnames[cq->team], text);
                 break;
             }
 
@@ -3131,8 +3192,10 @@ namespace server
             {
                 getstring(text, p);
                 if(!allowmsg(ci, cm, type)) break;
-                filtertext(ci->name, text, false, MAXNAMELEN);
-                if(!ci->name[0]) copystring(ci->name, "unnamed");
+                filtertext(text, text, false, MAXNAMELEN);
+                if(!text[0]) copystring(text, "unnamed");
+                if(isdedicatedserver()) logoutf("rename: %s (%d) is now known as %s", ci->name, ci->clientnum, text);
+                copystring(ci->name, text);
                 QUEUE_INT(type);
                 QUEUE_STR(ci->name);
                 break;
@@ -3457,7 +3520,7 @@ namespace server
                 if(desc[0])
                 {
                     userinfo *u = users.access(userkey(name, desc));
-                    if(u) authpriv = u->privilege; else break;
+                    if(u) authpriv = u->privilege;
                 }
                 if(ci->local || ci->privilege >= authpriv) trykick(ci, victim, text);
                 else if(trykick(ci, victim, text, name, desc, authpriv, true) && tryauth(ci, name, desc))
@@ -3530,6 +3593,7 @@ namespace server
 
             case N_SERVCMD:
                 getstring(text, p);
+                if(text[0]) z_servcmd_parse(sender, text);
                 break;
 
             #define PARSEMESSAGES 1
@@ -3591,5 +3655,7 @@ namespace server
     int protocolversion() { return PROTOCOL_VERSION; }
 
     #include "aiman.h"
+
+    #include "z_genericservercommands.h"
 }
 

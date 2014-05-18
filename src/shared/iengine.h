@@ -465,8 +465,9 @@ extern void kicknonlocalclients(int reason = DISC_NONE);
 extern bool hasnonlocalclients();
 extern bool haslocalclients();
 extern void sendserverinforeply(ucharbuf &p);
-extern bool requestmaster(const char *req);
-extern bool requestmasterf(const char *fmt, ...) PRINTFARGS(1, 2);
+extern bool requestmasterf(int m, const char *fmt, ...) PRINTFARGS(2, 3);
+extern int findauthmaster(const char *desc, int old = -1);
+extern const char *getmasterauth(int m);
 extern bool isdedicatedserver();
 
 // serverbrowser

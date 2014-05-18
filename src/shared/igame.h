@@ -98,7 +98,7 @@ namespace server
     extern void serverinit();
     extern int reserveclients();
     extern int numchannels();
-    extern void clientdisconnect(int n);
+    extern void clientdisconnect(int n, bool forced = false, int reason = DISC_NONE);
     extern int clientconnect(int n, uint ip);
     extern void localdisconnect(int n);
     extern void localconnect(int n);
@@ -114,9 +114,9 @@ namespace server
     extern int serverport();
     extern const char *defaultmaster();
     extern int masterport();
-    extern void processmasterinput(const char *cmd, int cmdlen, const char *args);
-    extern void masterconnected();
-    extern void masterdisconnected();
+    extern void processmasterinput(int m, const char *cmd, int cmdlen, const char *args);
+    extern void masterconnected(int m);
+    extern void masterdisconnected(int m);
     extern bool ispaused();
     extern int scaletime(int t);
 }
