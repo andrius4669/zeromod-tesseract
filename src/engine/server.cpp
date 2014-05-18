@@ -182,6 +182,7 @@ void cleanupserver()
 
 VARF(maxclients, 0, DEFAULTCLIENTS, MAXCLIENTS, { if(!maxclients) maxclients = DEFAULTCLIENTS; });
 VARF(maxdupclients, 0, 0, MAXCLIENTS, { if(serverhost) serverhost->duplicatePeers = maxdupclients ? maxdupclients : MAXCLIENTS; });
+VAR(maxpeers, 0, 0, MAXCLIENTS);
 
 void process(ENetPacket *packet, int sender, int chan);
 //void disconnect_client(int n, int reason);
@@ -327,14 +328,8 @@ void disconnect_client(int n, int reason)
 {
     if(!clients.inrange(n) || clients[n]->type!=ST_TCPIP) return;
     enet_peer_disconnect(clients[n]->peer, reason);
-    server::clientdisconnect(n);
+    server::clientdisconnect(n, true, reason);
     delclient(clients[n]);
-    const char *msg = disconnectreason(reason);
-    string s;
-    if(msg) formatstring(s, "client (%s) disconnected because: %s", clients[n]->hostname, msg);
-    else formatstring(s, "client (%s) disconnected", clients[n]->hostname);
-    logoutf("%s", s);
-    server::sendservmsg(s);
 }
 
 void kicknonlocalclients(int reason)
@@ -684,7 +679,6 @@ void serverslice(bool dedicated, uint timeout)   // main server update, called f
                 c.peer->data = &c;
                 string hn;
                 copystring(c.hostname, (enet_address_get_host_ip(&c.peer->address, hn, sizeof(hn))==0) ? hn : "unknown");
-                logoutf("client connected (%s)", c.hostname);
                 int reason = server::clientconnect(c.num, c.peer->address.host);
                 if(reason) disconnect_client(c.num, reason);
                 break;
@@ -700,7 +694,6 @@ void serverslice(bool dedicated, uint timeout)   // main server update, called f
             {
                 client *c = (client *)event.peer->data;
                 if(!c) break;
-                logoutf("disconnected client (%s)", c->hostname);
                 server::clientdisconnect(c->num);
                 delclient(c);
                 break;

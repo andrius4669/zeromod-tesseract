@@ -3,28 +3,6 @@
 
 #include "z_servercommands.h"
 
-void z_servcmd_test(int argc, char **argv, int sender)
-{
-    vector<char> buf;
-    const char *s = "testcmd";
-    buf.put(s, strlen(s));
-    s = tempformatstring(" [%d]:", argc);
-    buf.put(s, strlen(s));
-    loopi(argc)
-    {
-        s = tempformatstring(" [%s]", argv[i]);
-        buf.put(s, strlen(s));
-    }
-    buf.add('\0');
-    sendf(sender, 1, "ris", N_SERVMSG, buf.getbuf());
-}
-SCOMMANDNA(test0, 0, z_servcmd_test, 0);
-SCOMMANDNA(test1, 1, z_servcmd_test, 1);
-SCOMMANDNA(test2, 2, z_servcmd_test, 2);
-SCOMMANDNA(test3, 3, z_servcmd_test, 3);
-SCOMMANDNH(testh0, 0, z_servcmd_test);
-SCOMMANDNH(testh3, 3, z_servcmd_test);
-
 static char z_privcolor(int priv)
 {
     if(priv <= PRIV_NONE) return '7';

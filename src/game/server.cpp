@@ -794,6 +794,18 @@ namespace server
         resetitems();
     }
 
+    int numspies(int exclude = -1, bool nospec = true, bool noai = true, bool priv = false)
+    {
+        int n = 0;
+        loopv(clients)
+        {
+            clientinfo *ci = clients[i];
+            if(!ci->spy) continue;
+            if(ci->clientnum!=exclude && (!nospec || ci->state.state!=CS_SPECTATOR || (priv && (ci->privilege || ci->local))) && (!noai || ci->state.aitype == AI_NONE)) n++;
+        }
+        return n;
+    }
+
     int numclients(int exclude = -1, bool nospec = true, bool noai = true, bool priv = false)
     {
         int n = 0;
@@ -802,20 +814,21 @@ namespace server
             clientinfo *ci = clients[i];
             if(ci->clientnum!=exclude && (!nospec || ci->state.state!=CS_SPECTATOR || (priv && (ci->privilege || ci->local))) && (!noai || ci->state.aitype == AI_NONE)) n++;
         }
+        n -= numspies(exclude, nospec, noai, priv);
         return n;
     }
 
     bool duplicatename(clientinfo *ci, char *name)
     {
         if(!name) name = ci->name;
-        loopv(clients) if(clients[i]!=ci && !strcmp(name, clients[i]->name)) return true;
+        loopv(clients) if(clients[i]!=ci && !clients[i]->spy && !strcmp(name, clients[i]->name)) return true;
         return false;
     }
 
     const char *colorname(clientinfo *ci, char *name = NULL)
     {
         if(!name) name = ci->name;
-        if(name[0] && !duplicatename(ci, name) && ci->state.aitype == AI_NONE) return name;
+        if(name[0] && !ci->spy && !duplicatename(ci, name) && ci->state.aitype == AI_NONE) return name;
         static string cname[3];
         static int cidx = 0;
         cidx = (cidx+1)%3;
@@ -2480,15 +2493,19 @@ namespace server
         ci->connectmillis = totalmillis;
         ci->sessionid = (rnd(0x1000000)*((totalmillis%10000)+1))&0xFFFFFF;
 
+        logoutf("connect: client %d (%s) connected", n, getclienthostname(n));
+
         connects.add(ci);
         if(!m_mp(gamemode)) return DISC_LOCAL;
         sendservinfo(ci);
         return DISC_NONE;
     }
 
-    void clientdisconnect(int n)
+    void clientdisconnect(int n, bool forced, int reason)
     {
         clientinfo *ci = getinfo(n);
+        const char *msg = disconnectreason(reason);
+        string s;
         loopv(clients) if(clients[i]->authkickvictim == ci->clientnum) clients[i]->cleanauth();
         if(ci->connected)
         {
@@ -2501,8 +2518,30 @@ namespace server
             aiman::removeai(ci);
             if(!numclients(-1, false, true)) noclients(); // bans clear when server empties
             if(ci->local) checkpausegame();
+            logoutf("disconnect: %s (%d) left", ci->name, ci->clientnum);
+            if(forced)
+            {
+                if(msg) formatstring(s, "client %s (%s) disconnected because: %s", colorname(ci), getclienthostname(n), msg);
+                else formatstring(s, "client %s (%s) disconnected", colorname(ci), getclienthostname(n));
+                sendservmsg(s);
+            }
         }
-        else connects.removeobj(ci);
+        else
+        {
+            connects.removeobj(ci);
+            if(forced)
+            {
+                if(msg) formatstring(s, "client (%s) disconnected because: %s", getclienthostname(n), msg);
+                else formatstring(s, "client (%s) disconnected", getclienthostname(n));
+                sendservmsg(s);
+            }
+        }
+        if(forced)
+        {
+            if(msg) logoutf("disconnect: client %d (%s) disconnected by server because: %s", n, getclienthostname(n), msg);
+            else logoutf("disconnect: client %d (%s) disconnected by server", n, getclienthostname(n));
+        }
+        else logoutf("disconnect: client %d (%s) disconnected", n, getclienthostname(n));
     }
 
     int reserveclients() { return 3; }
@@ -2767,6 +2806,7 @@ namespace server
 
         aiman::addclient(ci);
 
+        logoutf("connect: %s (%d) joined", ci->name, ci->clientnum);
         z_geoip_resolveclient(ci);
         z_geoip_show(ci);
         
@@ -3110,7 +3150,7 @@ namespace server
                 QUEUE_AI;
                 QUEUE_INT(type);
                 QUEUE_STR(text);
-                if(isdedicatedserver() && cq) logoutf("%s: %s", colorname(cq), text);
+                if(isdedicatedserver() && cq) logoutf("chat: %s (%d): %s", cq->name, cq->clientnum, text);
                 break;
             }
 
@@ -3126,7 +3166,7 @@ namespace server
                     if(t==cq || t->state.state==CS_SPECTATOR || t->state.aitype != AI_NONE || cq->team != t->team) continue;
                     sendf(t->clientnum, 1, "riis", N_SAYTEAM, cq->clientnum, text);
                 }
-                if(isdedicatedserver() && cq) logoutf("%s <%s>: %s", colorname(cq), teamnames[cq->team], text);
+                if(isdedicatedserver() && cq) logoutf("chat: %s (%d) <%s>: %s", cq->name, cq->clientnum, teamnames[cq->team], text);
                 break;
             }
 
@@ -3134,8 +3174,10 @@ namespace server
             {
                 getstring(text, p);
                 if(!allowmsg(ci, cm, type)) break;
-                filtertext(ci->name, text, false, MAXNAMELEN);
-                if(!ci->name[0]) copystring(ci->name, "unnamed");
+                filtertext(text, text, false, MAXNAMELEN);
+                if(!text[0]) copystring(text, "unnamed");
+                if(isdedicatedserver()) logoutf("rename: %s (%d) is now known as %s", ci->name, ci->clientnum, text);
+                copystring(ci->name, text);
                 QUEUE_INT(type);
                 QUEUE_STR(ci->name);
                 break;
