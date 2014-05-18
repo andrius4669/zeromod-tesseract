@@ -1,3 +1,3 @@
 #!/bin/sh
 
-make -C src install_server
+make -C src install_server $*
