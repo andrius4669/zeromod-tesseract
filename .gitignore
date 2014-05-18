@@ -1,0 +1,7 @@
+bin64/
+bin/
+bin_unix/
+src/tess_server
+*.o
+*.a
+*.gch
