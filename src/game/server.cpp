@@ -231,7 +231,7 @@ namespace server
         int authkickvictim;
         char *authkickreason;
         char *geoip_country, *geoip_region, *geoip_city, *geoip_continent;
-        bool chatmute, specmute, editmute;
+        bool chatmute, specmute, editmute, spy;
         int lastchat, lastedit;
 
         clientinfo() : getdemo(NULL), getmap(NULL), clipboard(NULL), authchallenge(NULL), authkickreason(NULL),
@@ -353,7 +353,7 @@ namespace server
             cleanclipboard();
             cleanauth();
             cleangeoip();
-            chatmute = specmute = editmute = false;
+            chatmute = specmute = editmute = spy = false;
             lastchat = lastedit = 0;
             mapchange();
         }

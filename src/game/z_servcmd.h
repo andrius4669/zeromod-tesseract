@@ -13,6 +13,8 @@ char *z_servcmd_check(char *text)
     return &text[1];
 }
 
+#define Z_MAXSERVCMDARGS 25
+
 void z_servcmd_parse(int sender, char *text)
 {
     if(!z_initedservcommands) z_initservcommands();
@@ -21,7 +23,7 @@ void z_servcmd_parse(int sender, char *text)
     if(!ci) return;
     
     int argc = 1;
-    char *argv[24];
+    char *argv[Z_MAXSERVCMDARGS];
     argv[0] = text;
     for(size_t i = 1; i < sizeof(argv)/sizeof(argv[0]); i++) argv[i] = NULL;
     char *s = strchr(text, ' ');
@@ -50,7 +52,7 @@ void z_servcmd_parse(int sender, char *text)
         sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you need to claim %s to execute this server command", privname(cc->privilege)));
         return;
     }
-    int n = cc->numargs ? min(cc->numargs+1, 24) : 24;
+    int n = cc->numargs ? min(cc->numargs+1, Z_MAXSERVCMDARGS) : Z_MAXSERVCMDARGS;
     if(argv[1]) for(int i = 2; i < n; i++)
     {
         s = strchr(argv[i - 1], ' ');
