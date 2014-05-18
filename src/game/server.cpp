@@ -226,6 +226,7 @@ namespace server
         int lastclipboard, needclipboard;
         int connectauth;
         uint authreq;
+        int authmaster;
         string authname, authdesc;
         void *authchallenge;
         int authkickvictim;
@@ -324,6 +325,7 @@ namespace server
         void cleanauth(bool full = true)
         {
             authreq = 0;
+            authmaster = -1;
             if(authchallenge) { freechallenge(authchallenge); authchallenge = NULL; }
             if(full) cleanauthkick();
         }
@@ -2549,13 +2551,15 @@ namespace server
     struct gbaninfo
     {
         enet_uint32 ip, mask;
+        int master;
     };
 
     vector<gbaninfo> gbans;
 
-    void cleargbans()
+    void cleargbans(int m = -1)
     {
-        gbans.shrink(0);
+        if(m < 0) gbans.shrink(0);
+        else loopvrev(gbans) if(gbans[i].master == m) gbans.removeunordered(i);
     }
 
     bool checkgban(uint ip)
@@ -2564,11 +2568,12 @@ namespace server
         return false;
     }
 
-    void addgban(const char *name)
+    void addgban(int m, const char *name)
     {
         union { uchar b[sizeof(enet_uint32)]; enet_uint32 i; } ip, mask;
         ip.i = 0;
         mask.i = 0;
+        const char *cidr = strchr(name, '/');
         loopi(4)
         {
             char *end = NULL;
@@ -2578,9 +2583,19 @@ namespace server
             name = end;
             while(*name && *name++ != '.');
         }
+        if(cidr && *++cidr)
+        {
+            int n = atoi(cidr);
+            if(n > 0)
+            {
+                for(int i = n; i < 32; i++) mask.b[i/8] &= ~(1 << (7 - (i & 7)));
+                ip.i &= mask.i;
+            }
+        }
         gbaninfo &ban = gbans.add();
         ban.ip = ip.i;
         ban.mask = mask.i;
+        ban.master = m;
 
         loopvrev(clients)
         {
@@ -2614,6 +2629,8 @@ namespace server
         return ci && ci->connected;
     }
 
+    #include "z_ms_gameserver_override.h"
+#if 0
     clientinfo *findauth(uint id)
     {
         loopv(clients) if(clients[i]->authreq == id) return clients[i];
@@ -2750,6 +2767,7 @@ namespace server
         else if(sscanf(cmd, "addgban %100s", val) == 1)
             addgban(val);
     }
+#endif
 
     void receivefile(int sender, uchar *data, int len)
     {
@@ -3502,7 +3520,7 @@ namespace server
                 if(desc[0])
                 {
                     userinfo *u = users.access(userkey(name, desc));
-                    if(u) authpriv = u->privilege; else break;
+                    if(u) authpriv = u->privilege;
                 }
                 if(ci->local || ci->privilege >= authpriv) trykick(ci, victim, text);
                 else if(trykick(ci, victim, text, name, desc, authpriv, true) && tryauth(ci, name, desc))
