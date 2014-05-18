@@ -3,6 +3,62 @@
 
 #include "z_servercommands.h"
 
+void z_servcmd_test(int argc, char **argv, int sender)
+{
+    vector<char> buf;
+    const char *s = "testcmd";
+    buf.put(s, strlen(s));
+    s = tempformatstring(" [%d]:", argc);
+    buf.put(s, strlen(s));
+    loopi(argc)
+    {
+        s = tempformatstring(" [%s]", argv[i]);
+        buf.put(s, strlen(s));
+    }
+    buf.add('\0');
+    sendf(sender, 1, "ris", N_SERVMSG, buf.getbuf());
+}
+SCOMMANDNA(test0, 0, z_servcmd_test, 0);
+SCOMMANDNA(test1, 1, z_servcmd_test, 1);
+SCOMMANDNA(test2, 2, z_servcmd_test, 2);
+SCOMMANDNA(test3, 3, z_servcmd_test, 3);
+SCOMMANDNH(testh0, 0, z_servcmd_test);
+SCOMMANDNH(testh3, 3, z_servcmd_test);
+
+static char z_privcolor(int priv)
+{
+    if(priv <= PRIV_NONE) return '7';
+    else if(priv <= PRIV_AUTH) return '0';
+    else return '6';
+}
+
+void z_servcmd_commands(int argc, char **argv, int sender)
+{
+    vector<char> cbufs[PRIV_ADMIN+1];
+    clientinfo *ci = getinfo(sender);
+    loopv(z_servcommands)
+    {
+        z_servcmdinfo &c = z_servcommands[i];
+        if(!c.valid() || c.hidden) continue;
+        if(ci && !ci->local && ci->privilege < c.privilege) continue;
+        int j = 0;
+        if(c.privilege >= PRIV_ADMIN) j = PRIV_ADMIN;
+        else if(c.privilege >= PRIV_AUTH) j = PRIV_AUTH;
+        else if(c.privilege >= PRIV_MASTER) j = PRIV_MASTER;
+        if(cbufs[j].empty()) { cbufs[j].add('\f'); cbufs[j].add(z_privcolor(j)); }
+        else { cbufs[j].add(','); cbufs[j].add(' '); }
+        cbufs[j].put(c.name, strlen(c.name));
+    }
+    sendf(sender, 1, "ris", N_SERVMSG, "\f2avaiable server commands:");
+    loopi(sizeof(cbufs)/sizeof(cbufs[0]))
+    {
+        if(cbufs[i].empty()) continue;
+        cbufs[i].add('\0');
+        sendf(sender, 1, "ris", N_SERVMSG, cbufs[i].getbuf());
+    }
+}
+SCOMMANDNA(commands, PRIV_NONE, z_servcmd_commands, 1);
+
 static const struct z_timedivinfo { const char *name; int timediv; } z_timedivinfos[] =
 {
     // I don't include "month" cuz its not exact
@@ -75,6 +131,8 @@ fail:
 }
 SCOMMANDN(stats, PRIV_NONE, z_servcmd_stats);
 
+VAR(servcmd_pm_comfirmation, 0, 0, 1);
+
 void z_servcmd_pm(int argc, char **argv, int sender)
 {
     if(argc <= 2) { sendf(sender, 1, "ris", N_SERVMSG, "please specify client and message"); return; }
@@ -87,6 +145,11 @@ void z_servcmd_pm(int argc, char **argv, int sender)
     ci = getinfo(sender);
     if(!ci) return;
     sendf(cn, 1, "ris", N_SERVMSG, tempformatstring("\f2pm: \f7%s \f5(%d)\f7: \f0%s", ci->name, ci->clientnum, argv[2]));
+    if(servcmd_pm_comfirmation)
+    {
+        ci = getinfo(cn);
+        sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("\f2your private message successfully sent to %s \f5(%d)", ci->name, ci->clientnum));
+    }
     return;
 cnfail:
     sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[1]));
