@@ -231,6 +231,11 @@ bool requestmasterf(int m, const char *fmt, ...)
     else return false;
 }
 
+ENetSocket connectmaster(int m, bool wait)
+{
+    return mss.inrange(m) ? mss[m].connectmaster(wait) : ENET_SOCKET_NULL;
+}
+
 void updatemasterserver()
 {
     loopv(mss) mss[i].updatemasterserver();
@@ -245,6 +250,11 @@ int findauthmaster(const char *desc, int old)
 {
     for(int m = old >= 0 ? old + 1 : 0; m < mss.length(); m++) if(!strcmp(desc, mss[m].masterauth)) return m;
     return -1;
+}
+
+const char *getmastername(int m)
+{
+    return mss.inrange(m) ? mss[m].mastername : "";
 }
 
 const char *getmasterauth(int m)

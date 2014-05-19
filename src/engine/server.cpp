@@ -1155,6 +1155,16 @@ void startlistenserver(int *usemaster)
     if(serverhost) { conoutf(CON_ERROR, "listen server is already running"); return; }
 
     allowupdatemaster = *usemaster>0 ? 1 : 0;
+    if(mss.length() > 1)
+    {
+        allowupdatemaster = 0;
+        loopv(mss) if(mss[i].allowupdatemaster) { allowupdatemaster = 1; break; }
+    }
+    else if(mss.empty())
+    {
+        if(allowupdatemaster) mss.add();
+    }
+    else mss[0].allowupdatemaster = allowupdatemaster;
 
     if(!setuplistenserver(false)) return;
 

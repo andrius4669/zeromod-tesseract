@@ -49,6 +49,10 @@ CLIENT_LIBS= -mwindows $(STD_LIBS) -L$(WINBIN) -L$(WINLIB) -lSDL2 -lSDL2_image -
 else	
 CLIENT_INCLUDES= $(INCLUDES) -I/usr/X11R6/include `sdl2-config --cflags`
 CLIENT_LIBS= -Lenet -lenet -L/usr/X11R6/lib -lX11 `sdl2-config --libs` -lSDL2_image -lSDL2_mixer -lz -lGL
+ifeq ($(shell ./check_geoip.sh $(CXX) $(CXXFLAGS) $(CLIENT_INCLUDES) -lGeoIP),1)
+CLIENT_INCLUDES+= -DUSE_GEOIP
+CLIENT_LIBS+= -lGeoIP
+endif
 endif
 ifeq ($(PLATFORM),Linux)
 CLIENT_LIBS+= -lrt
