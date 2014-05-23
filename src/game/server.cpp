@@ -790,10 +790,12 @@ namespace server
         return false;
     }
 
+    #include "z_triggers.h"
     void serverinit()
     {
         smapname[0] = '\0';
         resetitems();
+        z_exectrigger(Z_TRIGGER_STARTUP);
     }
 
     int numspies(int exclude = -1, bool nospec = true, bool noai = true, bool priv = false)
@@ -814,9 +816,9 @@ namespace server
         loopv(clients)
         {
             clientinfo *ci = clients[i];
+            if(ci->spy) continue;
             if(ci->clientnum!=exclude && (!nospec || ci->state.state!=CS_SPECTATOR || (priv && (ci->privilege || ci->local))) && (!noai || ci->state.aitype == AI_NONE)) n++;
         }
-        n -= numspies(exclude, nospec, noai, priv);
         return n;
     }
 
@@ -1379,6 +1381,7 @@ namespace server
         {
             mastermode = MM_OPEN;
             allowedips.shrink(0);
+            z_exectrigger(Z_TRIGGER_NOMASTER);
         }
         string msg;
         if(val && authname)
@@ -1909,11 +1912,13 @@ namespace server
         sendpacket(-1, 1, p.finalize(), ci->clientnum);
     }
 
+    VAR(server_load_ents, 0, 1, 2);
     void loaditems()
     {
         resetitems();
         notgotitems = true;
-        if(m_edit || !loadents(smapname, ments, &mcrc))
+        if(!server_load_ents) return;
+        if((server_load_ents < 2 ? m_edit : !smapname[0]) || !loadents(smapname, ments, &mcrc))
             return;
         loopv(ments) if(canspawnitem(ments[i].type))
         {
@@ -2386,11 +2391,12 @@ namespace server
         static bool compare(const crcinfo &x, const crcinfo &y) { return x.matches > y.matches; }
     };
 
+    #include "z_autosendmap.h"
     VAR(modifiedmapspectator, 0, 1, 2);
  
     void checkmaps(int req = -1)
     {
-        if(m_edit || !smapname[0]) return;
+        if((m_edit && z_connectsendmap < 2) || !smapname[0]) return;
         vector<crcinfo> crcs;
         int total = 0, unsent = 0, invalid = 0;
         if(mcrc) crcs.add(crcinfo(mcrc, clients.length() + 1));
@@ -2422,6 +2428,7 @@ namespace server
             formatstring(msg, "%s has modified map \"%s\"", colorname(ci), smapname);
             sendf(req, 1, "ris", N_SERVMSG, msg);
             if(req < 0) ci->warned = true;
+            if(req < 0 && m_edit && z_connectsendmap >= 2) z_sendmap(ci, NULL);
         }
         if(crcs.length() >= 2) loopv(crcs)
         {
@@ -2433,8 +2440,10 @@ namespace server
                 formatstring(msg, "%s has modified map \"%s\"", colorname(ci), smapname);
                 sendf(req, 1, "ris", N_SERVMSG, msg);
                 if(req < 0) ci->warned = true;
+                if(req < 0 && m_edit && z_connectsendmap >= 2) z_sendmap(ci, NULL);
             }
         }
+        if(m_edit) return;
         if(req < 0 && modifiedmapspectator && (mcrc || modifiedmapspectator > 1)) loopv(clients)
         {
             clientinfo *ci = clients[i];
@@ -2444,6 +2453,7 @@ namespace server
 
     bool shouldspectate(clientinfo *ci)
     {
+        if(m_edit) return false;
         return !ci->local && ci->warned && modifiedmapspectator && (mcrc || modifiedmapspectator > 1);
     }
  
@@ -2468,6 +2478,7 @@ namespace server
     {
         bannedips.shrink(0);
         aiman::clearai();
+        z_exectrigger(Z_TRIGGER_NOCLIENTS);
     }
 
     void localconnect(int n)
@@ -2518,7 +2529,7 @@ namespace server
             sendf(-1, 1, "ri2", N_CDIS, n);
             clients.removeobj(ci);
             aiman::removeai(ci);
-            if(!numclients(-1, false, true)) noclients(); // bans clear when server empties
+            if(!numclients(-1, false, true) && !numspies(-1, false, true)) noclients(); // bans clear when server empties
             if(ci->local) checkpausegame();
             logoutf("disconnect: %s (%d) left", ci->name, ci->clientnum);
             if(forced)
@@ -2548,18 +2559,18 @@ namespace server
 
     int reserveclients() { return 3; }
 
+    #include "z_gbans_override.h"
+#if 0
     struct gbaninfo
     {
         enet_uint32 ip, mask;
-        int master;
     };
 
     vector<gbaninfo> gbans;
 
-    void cleargbans(int m = -1)
+    void cleargbans()
     {
-        if(m < 0) gbans.shrink(0);
-        else loopvrev(gbans) if(gbans[i].master == m) gbans.removeunordered(i);
+        gbans.shrink(0);
     }
 
     bool checkgban(uint ip)
@@ -2573,7 +2584,6 @@ namespace server
         union { uchar b[sizeof(enet_uint32)]; enet_uint32 i; } ip, mask;
         ip.i = 0;
         mask.i = 0;
-        const char *cidr = strchr(name, '/');
         loopi(4)
         {
             char *end = NULL;
@@ -2583,19 +2593,9 @@ namespace server
             name = end;
             while(*name && *name++ != '.');
         }
-        if(cidr && *++cidr)
-        {
-            int n = atoi(cidr);
-            if(n > 0)
-            {
-                for(int i = n; i < 32; i++) mask.b[i/8] &= ~(1 << (7 - (i & 7)));
-                ip.i &= mask.i;
-            }
-        }
         gbaninfo &ban = gbans.add();
         ban.ip = ip.i;
         ban.mask = mask.i;
-        ban.master = m;
 
         loopvrev(clients)
         {
@@ -2604,6 +2604,7 @@ namespace server
             if(checkgban(getclientip(ci->clientnum))) disconnect_client(ci->clientnum, DISC_IPBAN);
         }
     }
+#endif
 
     int allowconnect(clientinfo *ci, const char *pwd = "")
     {
@@ -2798,6 +2799,8 @@ namespace server
     }
 
     #include "z_geoip.h"
+    #include "z_sendmap.h"
+    #include "z_autosendmap.h"
 
     void connected(clientinfo *ci)
     {
@@ -2831,6 +2834,8 @@ namespace server
         if(m_demo) setupdemoplayback();
 
         if(servermotd[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, servermotd);
+
+        if(m_edit && z_connectsendmap == 1) z_sendmap(ci, NULL);
     }
 
     #include "z_msgfilter.h"

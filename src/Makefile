@@ -7,6 +7,10 @@ PLATFORM_PREFIX= native
 
 INCLUDES= -Ishared -Iengine -Igame -Ienet/include
 
+ifneq (,$(findstring BSD,$(PLATFORM)))
+  override CXXFLAGS+= -I/usr/local/include -L/usr/local/lib
+endif
+
 STRIP=
 ifeq (,$(findstring -g,$(CXXFLAGS)))
 ifeq (,$(findstring -pg,$(CXXFLAGS)))
@@ -49,10 +53,6 @@ CLIENT_LIBS= -mwindows $(STD_LIBS) -L$(WINBIN) -L$(WINLIB) -lSDL2 -lSDL2_image -
 else	
 CLIENT_INCLUDES= $(INCLUDES) -I/usr/X11R6/include `sdl2-config --cflags`
 CLIENT_LIBS= -Lenet -lenet -L/usr/X11R6/lib -lX11 `sdl2-config --libs` -lSDL2_image -lSDL2_mixer -lz -lGL
-ifeq ($(shell ./check_geoip.sh $(CXX) $(CXXFLAGS) $(CLIENT_INCLUDES) -lGeoIP),1)
-CLIENT_INCLUDES+= -DUSE_GEOIP
-CLIENT_LIBS+= -lGeoIP
-endif
 endif
 ifeq ($(PLATFORM),Linux)
 CLIENT_LIBS+= -lrt
@@ -137,6 +137,8 @@ MASTER_LIBS= $(SERVER_LIBS)
 ifeq ($(shell ./check_geoip.sh $(CXX) $(CXXFLAGS) $(SERVER_INCLUDES) -lGeoIP),1)
 SERVER_INCLUDES+= -DUSE_GEOIP
 SERVER_LIBS+= -lGeoIP
+CLIENT_INCLUDES+= -DUSE_GEOIP
+CLIENT_LIBS+= -lGeoIP
 endif
 endif
 
@@ -479,10 +481,12 @@ game/scoreboard.o: shared/ents.h shared/command.h shared/glexts.h
 game/scoreboard.o: shared/glemu.h shared/iengine.h shared/igame.h game/ai.h
 game/server.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/server.o: shared/ents.h shared/command.h shared/glexts.h shared/glemu.h
-game/server.o: shared/iengine.h shared/igame.h game/ai.h game/ctf.h
-game/server.o: game/z_ms_gameserver_override.h game/z_geoip.h
-game/server.o: game/z_msgfilter.h game/z_servcmd.h game/z_servercommands.h
-game/server.o: game/extinfo.h game/aiman.h game/z_genericservercommands.h
+game/server.o: shared/iengine.h shared/igame.h game/ai.h game/z_triggers.h
+game/server.o: game/ctf.h game/z_autosendmap.h game/z_sendmap.h
+game/server.o: game/z_servcmd.h game/z_servercommands.h
+game/server.o: game/z_gbans_override.h game/z_ms_gameserver_override.h
+game/server.o: game/z_geoip.h game/z_msgfilter.h game/extinfo.h game/aiman.h
+game/server.o: game/z_genericservercommands.h
 game/waypoint.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/waypoint.o: shared/ents.h shared/command.h shared/glexts.h
 game/waypoint.o: shared/glemu.h shared/iengine.h shared/igame.h game/ai.h
@@ -527,9 +531,11 @@ standalone/game/entities.o: shared/iengine.h shared/igame.h game/ai.h
 standalone/game/server.o: game/game.h shared/cube.h shared/tools.h
 standalone/game/server.o: shared/geom.h shared/ents.h shared/command.h
 standalone/game/server.o: shared/iengine.h shared/igame.h game/ai.h
-standalone/game/server.o: game/ctf.h game/z_ms_gameserver_override.h
-standalone/game/server.o: game/z_geoip.h game/z_msgfilter.h game/z_servcmd.h
-standalone/game/server.o: game/z_servercommands.h game/extinfo.h game/aiman.h
+standalone/game/server.o: game/z_triggers.h game/ctf.h game/z_autosendmap.h
+standalone/game/server.o: game/z_sendmap.h game/z_servcmd.h
+standalone/game/server.o: game/z_servercommands.h game/z_gbans_override.h
+standalone/game/server.o: game/z_ms_gameserver_override.h game/z_geoip.h
+standalone/game/server.o: game/z_msgfilter.h game/extinfo.h game/aiman.h
 standalone/game/server.o: game/z_genericservercommands.h
 standalone/engine/master.o: shared/cube.h shared/tools.h shared/geom.h
 standalone/engine/master.o: shared/ents.h shared/command.h shared/iengine.h

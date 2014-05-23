@@ -1,7 +1,7 @@
 #ifndef Z_GENERICSERVERCOMMANDS_H
 #define Z_GENERICSERVERCOMMANDS_H 1
 
-#include "z_servercommands.h"
+#include "z_servcmd.h"
 
 static char z_privcolor(int priv)
 {
@@ -95,12 +95,14 @@ void z_servcmd_stats(int argc, char **argv, int sender)
     {
         ci = cis[i];
         string buf;
-        if(m_ctf) formatstring(buf, "\fs\f2stats: %s: frags: %d, flags: %d, deaths: %d, teamkills: %d, accuracy(%%): %d, kpd: %.2f\fr", colorname(ci),
-            ci->state.frags, ci->state.flags, ci->state.deaths, ci->state.teamkills,
+        if(m_ctf) formatstring(buf,
+            "\f6stats: \f7%s: \f2frags: \f7%d\f2, flags: \f7%d\f2, deaths: \f7%d\f2, teamkills: \f7%d\f2, accuracy(%%): \f7%d\f2, kpd: \f7%.2f",
+            colorname(ci), ci->state.frags, ci->state.flags, ci->state.deaths, ci->state.teamkills,
             ci->state.damage*100/max(ci->state.shotdamage,1), float(ci->state.frags)/max(ci->state.deaths,1));
-        else formatstring(buf, "\fs\f2stats: %s: frags: %d, deaths: %d, teamkills: %d, accuracy(%%): %d, kpd: %.2f\fr", colorname(ci),
-            ci->state.frags, ci->state.deaths, ci->state.teamkills, ci->state.damage*100/max(ci->state.shotdamage,1),
-            float(ci->state.frags)/max(ci->state.deaths,1));
+        else formatstring(buf,
+            "\f6stats: \f7%s: \f2frags: \f7%d\f2, deaths: \f7%d\f2, teamkills: \f7%d\f2, accuracy(%%): \f7%d\f2, kpd: \f7%.2f",
+            colorname(ci), ci->state.frags, ci->state.deaths, ci->state.teamkills,
+            ci->state.damage*100/max(ci->state.shotdamage,1), float(ci->state.frags)/max(ci->state.deaths,1));
         sendf(sender, 1, "ris", N_SERVMSG, buf);
     }
     return;
@@ -133,5 +135,33 @@ cnfail:
     sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[1]));
 }
 SCOMMANDNA(pm, PRIV_NONE, z_servcmd_pm, 2);
+
+void z_servcmd_mute(int argc, char **argv, int sender)
+{
+    if(argc < 2) { sendf(sender, 1, "ris", N_SERVMSG, "please specify client"); return; }
+    int val = -1;
+    if(argc > 2) val = clamp(atoi(argv[2]), 0, 1);
+    int cn;
+    clientinfo *ci;
+    if(!z_parseclient(argv[1], &cn)) goto cnfail;
+    ci = getinfo(cn);
+    if(!ci || !ci->connected) goto cnfail;
+    if(!strcmp(argv[0], "mute") || !strcmp(argv[0], "chatmute"))
+    {
+        ci->chatmute = val!=0;
+        sendf(ci->ownernum, 1, "ris", N_SERVMSG, tempformatstring("you are %s", ci->chatmute ? "muted" : "unmuted"));
+    }
+    else if(!strcmp(argv[0], "editmute"))
+    {
+        ci->editmute = val!=0;
+        sendf(ci->ownernum, 1, "ris", N_SERVMSG, tempformatstring("your edits are %s", ci->chatmute ? "muted" : "unmuted"));
+    }
+    return;
+cnfail:
+    sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[1]));
+}
+SCOMMANDNA(mute, PRIV_AUTH, z_servcmd_mute, 2);
+SCOMMANDNAH(chatmute, PRIV_AUTH, z_servcmd_mute, 2);
+SCOMMANDNA(editmute, PRIV_MASTER, z_servcmd_mute, 2);
 
 #endif //Z_GENERICSERVERCOMMANDS_H

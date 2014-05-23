@@ -37,19 +37,19 @@ vector<z_servcmdinfo> z_servcommands;
 static bool z_initedservcommands = false;
 static vector<z_servcmdinfo> *z_servcommandinits = NULL;
 
-bool addservcmd(const z_servcmdinfo &cmd)
+static bool addservcmd(const z_servcmdinfo &cmd)
 {
     if(!z_initedservcommands)
     {
         if(!z_servcommandinits) z_servcommandinits = new vector<z_servcmdinfo>;
         z_servcommandinits->add(cmd);
-        return true;
+        return false;
     }
     z_servcommands.add(cmd);
-    return true;
+    return false;
 }
 
-static bool z_initservcommands()
+static void z_initservcommands()
 {
     z_initedservcommands = true;
     
@@ -58,27 +58,6 @@ static bool z_initservcommands()
         loopv(*z_servcommandinits) if((*z_servcommandinits)[i].valid()) addservcmd((*z_servcommandinits)[i]);
         DELETEP(z_servcommandinits);
     }
-    
-    return true;
-}
-
-bool z_parseclient(const char *str, int *cn)
-{
-    if(!str) return false;
-    char *end;
-    int n = strtol(str, &end, 10);
-    if(*str && !*end) { *cn = n; return true; }
-    loopv(clients)
-    {
-        clientinfo *ci = clients[i];
-        if(!strcmp(str, ci->name)) { *cn = ci->clientnum; return true; }
-    }
-    loopv(clients)
-    {
-        clientinfo *ci = clients[i];
-        if(!strcasecmp(str, ci->name)) { *cn = ci->clientnum; return true; }
-    }
-    return false;
 }
 
 #define SCOMMANDZ(_name, _priv, _funcname, _args, _hidden) UNUSED static bool __s_dummy__##_name = addservcmd(z_servcmdinfo(#_name, _funcname, _priv, _args, _hidden))

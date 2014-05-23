@@ -3,6 +3,25 @@
 
 #include "z_servercommands.h"
 
+bool z_parseclient(const char *str, int *cn)
+{
+    if(!str) return false;
+    char *end;
+    int n = strtol(str, &end, 10);
+    if(*str && !*end) { *cn = n; return true; }
+    loopv(clients)
+    {
+        clientinfo *ci = clients[i];
+        if(!strcmp(str, ci->name)) { *cn = ci->clientnum; return true; }
+    }
+    loopv(clients)
+    {
+        clientinfo *ci = clients[i];
+        if(!strcasecmp(str, ci->name)) { *cn = ci->clientnum; return true; }
+    }
+    return false;
+}
+
 SVAR(servcmd_chars, "");
 
 char *z_servcmd_check(char *text)

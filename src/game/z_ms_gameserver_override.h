@@ -1,6 +1,8 @@
 #ifndef Z_MS_GAMESERVER_OVERRIDE_H
 #define Z_MS_GAMESERVER_OVERRIDE_H 1
 
+#include "z_gbans_override.h"
+
 clientinfo *findauth(int m, uint id)
 {
     loopv(clients) if(clients[i]->authmaster == m && clients[i]->authreq == id) return clients[i];

@@ -114,9 +114,11 @@ void z_geoip_resolveclient(clientinfo *ci)
     size_t len;
     if(z_gi && (geoip_show_continent || geoip_show_country))
     {
-        // const char *country = GeoIP_country_name_by_ipnum(z_gi, ip); // depricated
+        int country_id = GeoIP_id_by_ipnum(z_gi, ip); // depricated
+        /* does not work on *BSD
         GeoIPLookup gl;
         int country_id = GeoIP_id_by_ipnum_gl(z_gi, ip, &gl);
+        */
         if(geoip_show_continent)
         {
             const char *continent = z_geoip_decode_continent(GeoIP_continent_by_id(country_id));
