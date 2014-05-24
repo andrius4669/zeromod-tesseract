@@ -486,7 +486,7 @@ game/server.o: game/ctf.h game/z_autosendmap.h game/z_sendmap.h
 game/server.o: game/z_servcmd.h game/z_servercommands.h
 game/server.o: game/z_gbans_override.h game/z_ms_gameserver_override.h
 game/server.o: game/z_geoip.h game/z_msgfilter.h game/extinfo.h game/aiman.h
-game/server.o: game/z_genericservercommands.h
+game/server.o: game/z_genericservercommands.h game/z_mutes.h
 game/waypoint.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/waypoint.o: shared/ents.h shared/command.h shared/glexts.h
 game/waypoint.o: shared/glemu.h shared/iengine.h shared/igame.h game/ai.h
@@ -536,7 +536,7 @@ standalone/game/server.o: game/z_sendmap.h game/z_servcmd.h
 standalone/game/server.o: game/z_servercommands.h game/z_gbans_override.h
 standalone/game/server.o: game/z_ms_gameserver_override.h game/z_geoip.h
 standalone/game/server.o: game/z_msgfilter.h game/extinfo.h game/aiman.h
-standalone/game/server.o: game/z_genericservercommands.h
+standalone/game/server.o: game/z_genericservercommands.h game/z_mutes.h
 standalone/engine/master.o: shared/cube.h shared/tools.h shared/geom.h
 standalone/engine/master.o: shared/ents.h shared/command.h shared/iengine.h
 standalone/engine/master.o: shared/igame.h

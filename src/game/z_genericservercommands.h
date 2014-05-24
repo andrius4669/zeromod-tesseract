@@ -10,7 +10,7 @@ static char z_privcolor(int priv)
     else return '6';
 }
 
-void z_servcmd_commands(int argc, char **argv, int sender)
+static void z_servcmd_commands(int argc, char **argv, int sender)
 {
     vector<char> cbufs[PRIV_ADMIN+1];
     clientinfo *ci = getinfo(sender);
@@ -36,6 +36,7 @@ void z_servcmd_commands(int argc, char **argv, int sender)
     }
 }
 SCOMMANDNA(commands, PRIV_NONE, z_servcmd_commands, 1);
+SCOMMANDNAH(help, PRIV_NONE, z_servcmd_commands, 1);
 
 static const struct z_timedivinfo { const char *name; int timediv; } z_timedivinfos[] =
 {
@@ -111,7 +112,7 @@ fail:
 }
 SCOMMANDN(stats, PRIV_NONE, z_servcmd_stats);
 
-VAR(servcmd_pm_comfirmation, 0, 0, 1);
+VAR(servcmd_pm_comfirmation, 0, 1, 1);
 
 void z_servcmd_pm(int argc, char **argv, int sender)
 {
@@ -136,32 +137,6 @@ cnfail:
 }
 SCOMMANDNA(pm, PRIV_NONE, z_servcmd_pm, 2);
 
-void z_servcmd_mute(int argc, char **argv, int sender)
-{
-    if(argc < 2) { sendf(sender, 1, "ris", N_SERVMSG, "please specify client"); return; }
-    int val = -1;
-    if(argc > 2) val = clamp(atoi(argv[2]), 0, 1);
-    int cn;
-    clientinfo *ci;
-    if(!z_parseclient(argv[1], &cn)) goto cnfail;
-    ci = getinfo(cn);
-    if(!ci || !ci->connected) goto cnfail;
-    if(!strcmp(argv[0], "mute") || !strcmp(argv[0], "chatmute"))
-    {
-        ci->chatmute = val!=0;
-        sendf(ci->ownernum, 1, "ris", N_SERVMSG, tempformatstring("you are %s", ci->chatmute ? "muted" : "unmuted"));
-    }
-    else if(!strcmp(argv[0], "editmute"))
-    {
-        ci->editmute = val!=0;
-        sendf(ci->ownernum, 1, "ris", N_SERVMSG, tempformatstring("your edits are %s", ci->chatmute ? "muted" : "unmuted"));
-    }
-    return;
-cnfail:
-    sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[1]));
-}
-SCOMMANDNA(mute, PRIV_AUTH, z_servcmd_mute, 2);
-SCOMMANDNAH(chatmute, PRIV_AUTH, z_servcmd_mute, 2);
-SCOMMANDNA(editmute, PRIV_MASTER, z_servcmd_mute, 2);
+#include "z_mutes.h"
 
 #endif //Z_GENERICSERVERCOMMANDS_H

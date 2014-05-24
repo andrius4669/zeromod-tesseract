@@ -2836,6 +2836,8 @@ namespace server
         if(servermotd[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, servermotd);
 
         if(m_edit && z_connectsendmap == 1) z_sendmap(ci, NULL);
+        extern bool z_autoeditmute;
+        if(z_autoeditmute) ci->editmute = true;
     }
 
     #include "z_msgfilter.h"
