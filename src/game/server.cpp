@@ -1285,7 +1285,7 @@ namespace server
     };
     hashset<userinfo> users;
 
-    void adduser(char *name, char *desc, const char *pubkey, const char *priv)
+    void adduser(char *name, char *desc, char *pubkey, char *priv)
     {
         userkey key(name, desc);
         userinfo &u = users[key];
@@ -1299,11 +1299,7 @@ namespace server
             case 'm': case 'M': default: u.privilege = PRIV_AUTH; break;
         }
     }
-    ICOMMAND(adduser, "ssssN", (char *s0, char *s1, char *s2, char *s3, int *numargs),
-    {
-        if(*numargs > 2) adduser(s0, s1, s2, s3);
-        else if(*numargs > 1) adduser(s0, serverauth, s1, "");
-    });
+    COMMAND(adduser, "ssss");
 
     void clearusers()
     {
@@ -2770,6 +2766,9 @@ namespace server
     }
 #endif
 
+    #include "z_sendmap.h"
+    #include "z_autosendmap.h"
+
     void receivefile(int sender, uchar *data, int len)
     {
         if(!m_edit || len > 4*1024*1024) return;
@@ -2782,6 +2781,7 @@ namespace server
         if(!mapdata) { sendf(sender, 1, "ris", N_SERVMSG, "failed to open temporary file for map"); return; }
         mapdata->write(data, len);
         sendservmsgf("[%s sent a map to server, \"/getmap\" to receive it]", colorname(ci));
+        if(z_autosendmap) loopv(clients) if(clients[i]->state.aitype == AI_NONE && clients[i]->clientnum != sender) z_sendmap(clients[i], NULL, mapdata, true);
     }
 
     void sendclipboard(clientinfo *ci)
@@ -2800,8 +2800,6 @@ namespace server
     }
 
     #include "z_geoip.h"
-    #include "z_sendmap.h"
-    #include "z_autosendmap.h"
 
     void connected(clientinfo *ci)
     {
