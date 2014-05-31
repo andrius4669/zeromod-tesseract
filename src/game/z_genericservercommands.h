@@ -40,7 +40,7 @@ SCOMMANDNAH(help, PRIV_NONE, z_servcmd_commands, 1);
 
 static const struct z_timedivinfo { const char *name; int timediv; } z_timedivinfos[] =
 {
-    // I don't include "month" cuz its not exact
+    // month is inaccurate 
     { "week", 60*60*24*7 },
     { "day", 60*60*24 },
     { "hour", 60*60 },
