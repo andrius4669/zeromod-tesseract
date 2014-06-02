@@ -48,7 +48,7 @@
         putint(q, ci->state.gunselect);
         putint(q, ci->privilege);
         putint(q, ci->state.state);
-        uint ip = extinfo_showip ? getclientip(ci->clientnum) : 0xFFFFFFFF;
+        uint ip = extinfo_showip ? getclientip(ci->clientnum) : 0;
         q.put((uchar*)&ip, 3);
         sendserverinforeply(q);
     }

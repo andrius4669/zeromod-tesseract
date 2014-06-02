@@ -63,13 +63,15 @@ static void z_init_geoip()
     }
     if(geoip_country_enable && geoip_country_database[0] && !z_gi)
     {
-        z_gi = GeoIP_open(geoip_country_database, GEOIP_INDEX_CACHE);
+        const char *found = findfile(geoip_country_database, "rb");
+        if(found) z_gi = GeoIP_open(found, GEOIP_INDEX_CACHE);
         if(z_gi) GeoIP_set_charset(z_gi, GEOIP_CHARSET_UTF8);
         else logoutf("WARNING: could not open geoip country database file \"%s\"", geoip_country_database);
     }
     if(geoip_city_enable && geoip_city_database[0] && !z_gic)
     {
-        z_gic = GeoIP_open(geoip_city_database, GEOIP_INDEX_CACHE);
+        const char *found = findfile(geoip_city_database, "rb");
+        if(found) z_gic = GeoIP_open(found, GEOIP_INDEX_CACHE);
         if(z_gic) GeoIP_set_charset(z_gic, GEOIP_CHARSET_UTF8);
         else logoutf("WARNING: could not open geoip city database file \"%s\"", geoip_city_database);
     }
@@ -81,8 +83,7 @@ static void z_init_geoip()
 #ifdef USE_GEOIP
 static const char *z_geoip_decode_continent(const char *cont)
 {
-    /**/ if(!cont) /***********/ return(NULL);
-    else if(!strcmp(cont, "AF")) return("Africa");
+    /**/ if(!strcmp(cont, "AF")) return("Africa");
     else if(!strcmp(cont, "AS")) return("Asia");
     else if(!strcmp(cont, "EU")) return("Europe");
     else if(!strcmp(cont, "NA")) return("North America");
@@ -99,29 +100,36 @@ void z_geoip_resolveclient(clientinfo *ci)
     z_init_geoip();
     uint ip = ENET_NET_TO_HOST_32(getclientip(ci->clientnum));
     if(!ip) return;
-    loopi(sizeof(reservedips)/sizeof(reservedips[0]))
+    bool foundreserved = false;
+    loopi(sizeof(reservedips)/sizeof(reservedips[0])) if((ip & reservedips[i].mask) == reservedips[i].ip)
     {
-        if((ip & reservedips[i].mask) == reservedips[i].ip)
+        int    components_v[] = { geoip_show_city, geoip_show_region, geoip_show_country, geoip_show_continent };
+        char **components_r[] = { &ci->geoip_city, &ci->geoip_region, &ci->geoip_country, &ci->geoip_continent };
+        int bestcomp = -1;
+        for(int j = 0; j < 2 && bestcomp < 0; j++)
         {
-            ci->geoip_country = newstring(reservedips[i].name);
-            break;
+            loopk(sizeof(components_v)/sizeof(components_v[0])) if(!j ? components_v[k] == 1 : components_v[k])
+            {
+                bestcomp = k;
+                break
+            }
         }
+        *components_r[max(bestcomp, 0)] = newstring(reservedips[i].name);
+        foundreserved = true;
+        break;
     }
-    if(ci->geoip_country) return;
-    
+    if(foundreserved) return;
+
 #ifdef USE_GEOIP
     uchar buf[MAXSTRLEN];
     size_t len;
     if(z_gi && (geoip_show_continent || geoip_show_country))
     {
-        int country_id = GeoIP_id_by_ipnum(z_gi, ip); // depricated
-        /* does not work on *BSD
-        GeoIPLookup gl;
-        int country_id = GeoIP_id_by_ipnum_gl(z_gi, ip, &gl);
-        */
+        int country_id = GeoIP_id_by_ipnum(z_gi, ip);
         if(geoip_show_continent)
         {
-            const char *continent = z_geoip_decode_continent(GeoIP_continent_by_id(country_id));
+            const char *shortcont = GeoIP_continent_by_id(country_id);
+            const char *continent = shortcont ? z_geoip_decode_continent(shortcont) : NULL;
             if(continent) ci->geoip_continent = newstring(continent);
         }
         if(geoip_show_country)
@@ -145,7 +153,7 @@ void z_geoip_resolveclient(clientinfo *ci)
                 const char *continent = z_geoip_decode_continent(gir->continent_code);
                 if(continent) ci->geoip_continent = newstring(continent);
             }
-            if(geoip_show_country && !ci->geoip_country)        // country_name is always filled
+            if(geoip_show_country && !ci->geoip_country && gir->country_name)
             {
                 len = decodeutf8(buf, sizeof(buf)-1, (const uchar *)gir->country_name, strlen(gir->country_name));
                 if(len > 0) { buf[len] = '\0'; ci->geoip_country = newstring((const char *)buf); }
@@ -203,7 +211,7 @@ void z_geoip_show(clientinfo *ci)
             }
         }
     }
-    
+
     loopi(2)
     {
         char *s = i ? ncstr : acstr;

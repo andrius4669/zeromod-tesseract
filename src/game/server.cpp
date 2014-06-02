@@ -2485,6 +2485,8 @@ namespace server
         ci->sessionid = (rnd(0x1000000)*((totalmillis%10000)+1))&0xFFFFFF;
         ci->local = true;
 
+        logoutf("connect: client %d (%s) connected", n, getclienthostname(n));
+
         connects.add(ci);
         sendservinfo(ci);
     }
