@@ -15,8 +15,6 @@ namespace game
     const char *gameident() { return "Tesseract"; }
 }
 
-extern ENetAddress masteraddress;
-
 namespace server
 {
     struct server_entity            // server side version of "entity" type

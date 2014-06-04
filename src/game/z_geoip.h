@@ -111,7 +111,7 @@ void z_geoip_resolveclient(clientinfo *ci)
             loopk(sizeof(components_v)/sizeof(components_v[0])) if(!j ? components_v[k] == 1 : components_v[k])
             {
                 bestcomp = k;
-                break
+                break;
             }
         }
         *components_r[max(bestcomp, 0)] = newstring(reservedips[i].name);
