@@ -97,8 +97,8 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
             putint(p, mastermode);
             loopvj(clients) if(clients[j]->privilege >= PRIV_MASTER && clients[j]->canseemypriv(cj))
             {
-                putint(p, clients[i]->clientnum);
-                putint(p, clients[i]->privilege);
+                putint(p, clients[j]->clientnum);
+                putint(p, clients[j]->privilege);
             }
             putint(p, -1);
             sendpacket(cj->clientnum, 1, p.finalize());
@@ -123,8 +123,8 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
             putint(p, mastermode);
             loopvj(clients) if(clients[j]->privilege >= PRIV_MASTER && clients[j]->canseemypriv(cj))
             {
-                putint(p, clients[i]->clientnum);
-                putint(p, clients[i]->privilege);
+                putint(p, clients[j]->clientnum);
+                putint(p, clients[j]->privilege);
             }
             putint(p, -1);
             sendpacket(cj->clientnum, 1, p.finalize());
