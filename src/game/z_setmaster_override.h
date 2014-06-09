@@ -84,7 +84,7 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
     loopv(clients)
     {
         clientinfo *cj = clients[i];
-        if(!cj->state.aitype!=AI_NONE) continue;
+        if(cj->state.aitype!=AI_NONE) continue;
         // 1 case: client can see that ci claimed
         // 2 case: client could see old privilege, and ci relinquished
         // action: send out message and new privileges

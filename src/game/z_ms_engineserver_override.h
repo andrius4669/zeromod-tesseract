@@ -207,12 +207,14 @@ SVARF(mastername, server::defaultmaster(),
 {
     if(!mss.inrange(currmss)) addms();
     mss[currmss].disconnectmaster();
+    mss[currmss].lastconnectmaster = 0;
     copystring(mss[currmss].mastername, mastername);
 });
 VARF(masterport, 1, server::masterport(), 0xFFFF,
 {
     if(!mss.inrange(currmss)) addms();
     mss[currmss].disconnectmaster();
+    mss[currmss].lastconnectmaster = 0;
     mss[currmss].masterport = masterport;
 });
 SVARF(masterauth, "",

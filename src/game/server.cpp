@@ -370,7 +370,7 @@ namespace server
             else return gameoffset + clientmillis;
         }
 
-        bool isinvpriv(int priv = -1) const { if(priv < 0) priv = privilege; return priv > PRIV_MASTER && invpriv; }
+        bool isinvpriv(int priv) const { return invpriv && priv > PRIV_MASTER; }
 
         bool canseemypriv(clientinfo *ci, int priv = -1) const
         {
