@@ -31,7 +31,7 @@ VAR(geoip_show_region, 0, 0, 2);
 VAR(geoip_show_country, 0, 1, 2);
 VAR(geoip_show_continent, 0, 0, 2);
 VAR(geoip_skip_duplicates, 0, 1, 1);
-SVAR(geoip_color_scheme, "707");
+SVAR(geoip_color_scheme, "777");
 
 static const struct
 {

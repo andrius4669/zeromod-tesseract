@@ -53,6 +53,6 @@ static void z_exectrigger(int type)
     loopv(z_triggers) if(z_triggers[i].type == type) z_triggers[i].fun(type);
 }
 
-#define Z_TRIGGER(fun, type) template<int N> struct z_tname; template<> struct z_tname<__LINE__> { UNUSED static bool init; }; UNUSED bool z_tname<__LINE__>::init = z_addtrigger(fun, type)
+#define Z_TRIGGER(fun, type) template<int N> struct z_tname##fun; template<> struct z_tname##fun<__LINE__> { UNUSED static bool init; }; UNUSED bool z_tname##fun<__LINE__>::init = z_addtrigger(fun, type)
 
 #endif //Z_TRIGGERS_H

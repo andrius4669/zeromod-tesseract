@@ -10,12 +10,13 @@ struct z_servcmdinfo
     int privilege;
     int numargs;
     bool hidden;
+    int vispriv;
     
-    z_servcmdinfo(): fun(NULL), privilege(PRIV_NONE), numargs(0), hidden(false) { name[0] = '\0'; }
+    z_servcmdinfo(): fun(NULL), privilege(PRIV_NONE), numargs(0), hidden(false), vispriv(PRIV_NONE) { name[0] = '\0'; }
     z_servcmdinfo(const z_servcmdinfo &n): fun(n.fun), privilege(n.privilege),
-        numargs(n.numargs), hidden(n.hidden) { copystring(name, n.name); }
-    z_servcmdinfo(const char *_name, z_scmdfun _fun, int _priv, int _numargs, bool _hidden): fun(_fun),
-        privilege(_priv), numargs(_numargs), hidden(_hidden) { copystring(name, _name); }
+        numargs(n.numargs), hidden(n.hidden), vispriv(n.vispriv) { copystring(name, n.name); }
+    z_servcmdinfo(const char *_name, z_scmdfun _fun, int _priv, int _numargs, bool _hidden = false, int _vispriv = PRIV_NONE):
+        fun(_fun), privilege(_priv), numargs(_numargs), hidden(_hidden), vispriv(_vispriv) { copystring(name, _name); }
     z_servcmdinfo &operator =(const z_servcmdinfo &n)
     {
         if(&n != this)
@@ -25,12 +26,15 @@ struct z_servcmdinfo
             privilege = n.privilege;
             numargs = n.numargs;
             hidden = n.hidden;
+            vispriv = n.vispriv;
         }
         return *this;
     }
     ~z_servcmdinfo() {}
     
-    bool valid() { return name[0] && fun; }
+    bool valid() const { return name[0] && fun; }
+    bool cansee(int priv, bool local) const { return valid() && !hidden && ((priv >= privilege && priv >= vispriv) || local); }
+    bool canexec(int priv, bool local) const { return valid() && (priv >= privilege || local); }
 };
 
 vector<z_servcmdinfo> z_servcommands;

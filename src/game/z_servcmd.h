@@ -65,7 +65,7 @@ void z_servcmd_parse(int sender, char *text)
         sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown server command: %s", text));
         return;
     }
-    if(!ci->local && ci->privilege < cc->privilege)
+    if(!cc->canexec(ci->privilege, ci->local))
     {
         extern const char *privname(int type);
         sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you need to claim %s to execute this server command", privname(cc->privilege)));

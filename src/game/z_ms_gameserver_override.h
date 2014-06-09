@@ -63,7 +63,7 @@ bool tryauth(clientinfo *ci, const char *user, const char *desc)
     ci->authreq = nextauthreq++;
     filtertext(ci->authname, user, false, 100);
     copystring(ci->authdesc, desc);
-    userinfo *u = ci->authdesc[0] ? users.access(userkey(ci->authname, ci->authdesc)) : NULL;
+    userinfo *u = users.access(userkey(ci->authname, ci->authdesc));
     if(u)
     {
         uint seed[3] = { ::hthash(serverauth) + detrnd(size_t(ci) + size_t(user) + size_t(desc), 0x10000), uint(totalmillis), randomMT() };
@@ -100,7 +100,7 @@ bool answerchallenge(clientinfo *ci, uint id, char *val, const char *desc)
     int om = ci->authmaster;
     if(om < 0)
     {
-        if(desc[0] && ci->authchallenge && checkchallenge(val, ci->authchallenge))
+        if(ci->authchallenge && checkchallenge(val, ci->authchallenge))
         {
             userinfo *u = users.access(userkey(ci->authname, ci->authdesc));
             if(u)
@@ -135,11 +135,12 @@ bool answerchallenge(clientinfo *ci, uint id, char *val, const char *desc)
 
 void masterconnected(int m)
 {
+    if(m >= 0) cleargbans(m);
 }
 
 void masterdisconnected(int m)
 {
-    if(m < 0) { cleargbans(m); return; }
+    if(m < 0) { cleargbans(-1); return; }
     loopvrev(clients)
     {
         clientinfo *ci = clients[i];

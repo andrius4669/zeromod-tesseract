@@ -8,20 +8,20 @@
 // serverport 42000
 
 // maximum number of allowed clients
-maxclients 8
+// maxclients 8
 
 // maximum number of bots a master can add - admins are unaffected by this limit
 // set to 0 to disallow bots
-serverbotlimit 8
+// serverbotlimit 8
 
 // controls whether or not the server is intended for "public" use
 // when set to 0, allows "setmaster 1" and locked/private mastermodes (for coop-editing and such)
 // when set to 1, can only gain master by "auth" or admin, and doesn't allow locked/private mastermodes
 // when set to 2, allows "setmaster 1" but disallows private mastermode (for public coop-editing)
-publicserver 0
+// publicserver 0
 
 // description server shows for the server browser
-serverdesc ""
+// serverdesc ""
 
 // password required to connect to the server
 // generally unnecessary unless you really don't want anyone connecting to your server
@@ -37,10 +37,10 @@ serverdesc ""
 // serverauth ""
 
 // controls whether or not the server reports to the masterserver
-updatemaster 1
+// updatemaster 1
 
 // optional message of the day to send to players on connect
-// servermotd "..."
+// servermotd ""
 
 // controls whether admin privs are necessary to record a demo
 // when 1 requires admin (default)
@@ -57,6 +57,11 @@ updatemaster 1
 // when 1 requires admin (default)
 // when 0 only requires master
 // restrictpausegame 1
+
+// controls whether admin privs are necessary to change gamespeed
+// when 1 requires admin (default)
+// when 0 only requires master
+// restrictgamespeed 1
 
 // whether or not to allow players to vote on maps not in the rotation
 // when 1 requires master
@@ -92,7 +97,7 @@ teamkillkick "*" 7 30
 // geoip_show_country 1
 // geoip_show_continent 0
 // geoip_skip_duplicates 1			// does not display duplicate entries
-// geoip_color_scheme "707"			// color scheme: "xyz" = "^fxclientname ^fyconnected from ^fzsome country"
+// geoip_color_scheme "777"			// color scheme made of 3 numbers describing first, second and thrid colors used in geoip messages
 
 // servcmd_chars ""				// defines which characters makes server interept text message as command
-servcmd_chars "#!"
+servcmd_chars "#!\"

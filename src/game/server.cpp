@@ -229,13 +229,13 @@ namespace server
         void *authchallenge;
         int authkickvictim;
         char *authkickreason;
-        char *geoip_country, *geoip_region, *geoip_city, *geoip_continent;
-        bool chatmute, specmute, editmute, spy;
+        char *geoip_country, *geoip_region, *geoip_city, *geoip_continent, *disc_reason;
+        bool chatmute, specmute, editmute, spy, invpriv;
         int lastchat, lastedit;
 
         clientinfo() : getdemo(NULL), getmap(NULL), clipboard(NULL), authchallenge(NULL), authkickreason(NULL),
-            geoip_country(NULL), geoip_region(NULL), geoip_city(NULL), geoip_continent(NULL) { reset(); }
-        ~clientinfo() { events.deletecontents(); cleanclipboard(); cleanauth(); cleangeoip(); }
+            geoip_country(NULL), geoip_region(NULL), geoip_city(NULL), geoip_continent(NULL), disc_reason(NULL) { reset(); }
+        ~clientinfo() { events.deletecontents(); cleanclipboard(); cleanauth(); cleangeoip(); DELETEP(disc_reason); }
 
         void addevent(gameevent *e)
         {
@@ -353,7 +353,8 @@ namespace server
             cleanclipboard();
             cleanauth();
             cleangeoip();
-            chatmute = specmute = editmute = spy = false;
+            DELETEP(disc_reason);
+            chatmute = specmute = editmute = spy = invpriv= false;
             lastchat = lastedit = 0;
             mapchange();
         }
@@ -368,6 +369,18 @@ namespace server
             }
             else return gameoffset + clientmillis;
         }
+
+        bool isinvpriv(int priv = -1) const { if(priv < 0) priv = privilege; return priv > PRIV_MASTER && invpriv; }
+
+        bool canseemypriv(clientinfo *ci, int priv = -1) const
+        {
+            if(priv < 0) priv = privilege;
+            if(spy) return ci && clientnum == ci->clientnum;
+            if(isinvpriv(priv)) return ci && (ci->privilege >= priv || ci->local || ci->clientnum == clientnum);
+            return true;
+        }
+
+        void setdisconnectreason(const char *reason) { DELETEP(disc_reason); disc_reason = newstring(reason); }
     };
 
     struct ban
@@ -1298,6 +1311,11 @@ namespace server
         }
     }
     COMMAND(adduser, "ssss");
+    ICOMMAND(adduser, "ssssN", (char *s1, char *s2, char *s3, char *s4, int *n),
+    {
+        if(*n > 2) adduser(s1, s2, s3, s4);
+        else adduser(s1, (char *)"", s2, (char *)"");
+    });
 
     void clearusers()
     {
@@ -1328,6 +1346,8 @@ namespace server
 
     extern void connected(clientinfo *ci);
 
+    #include "z_setmaster_override.h"
+#if 0
     bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *authname = NULL, const char *authdesc = NULL, int authpriv = PRIV_MASTER, bool force = false, bool trial = false)
     {
         if(authname && !val) return false;
@@ -1375,7 +1395,6 @@ namespace server
         {
             mastermode = MM_OPEN;
             allowedips.shrink(0);
-            z_exectrigger(Z_TRIGGER_NOMASTER);
         }
         string msg;
         if(val && authname)
@@ -1399,6 +1418,7 @@ namespace server
         checkpausegame();
         return true;
     }
+#endif
 
     bool trykick(clientinfo *ci, int victim, const char *reason = NULL, const char *authname = NULL, const char *authdesc = NULL, int authpriv = PRIV_NONE, bool trial = false)
     {
@@ -1749,6 +1769,7 @@ namespace server
         loopv(clients)
         {
             clientinfo *ci = clients[i];
+            if(ci->spy) continue;
             if(!ci->connected || ci->clientnum == exclude) continue;
 
             putinitclient(ci, p);
@@ -1790,7 +1811,7 @@ namespace server
             putint(p, mastermode);
             hasmaster = true;
         }
-        loopv(clients) if(clients[i]->privilege >= PRIV_MASTER)
+        loopv(clients) if(clients[i]->privilege >= PRIV_MASTER && clients[i]->canseemypriv(ci))
         {
             if(!hasmaster)
             {
@@ -1862,6 +1883,7 @@ namespace server
             loopv(clients)
             {
                 clientinfo *oi = clients[i];
+                if(oi->spy) continue;
                 if(ci && oi->clientnum==ci->clientnum) continue;
                 putint(p, oi->clientnum);
                 putint(p, oi->state.state);
@@ -3524,7 +3546,7 @@ namespace server
                 getstring(text, p);
                 filtertext(text, text);
                 int authpriv = PRIV_AUTH;
-                if(desc[0])
+                //if(desc[0])
                 {
                     userinfo *u = users.access(userkey(name, desc));
                     if(u) authpriv = u->privilege;
@@ -3560,7 +3582,7 @@ namespace server
             {
                 int val = getint(p);
                 if(ci->privilege < (restrictgamespeed ? PRIV_ADMIN : PRIV_MASTER) && !ci->local) break;
-                changegamespeed(val, ci);
+                changegamespeed(val, !ci->spy ? ci : NULL);
                 break;
             }
 
