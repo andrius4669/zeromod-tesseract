@@ -1310,7 +1310,6 @@ namespace server
             case 'm': case 'M': default: u.privilege = PRIV_AUTH; break;
         }
     }
-    COMMAND(adduser, "ssss");
     ICOMMAND(adduser, "ssssN", (char *s1, char *s2, char *s3, char *s4, int *n),
     {
         if(*n > 2) adduser(s1, s2, s3, s4);
