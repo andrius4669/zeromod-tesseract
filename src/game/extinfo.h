@@ -30,6 +30,9 @@
 */
 
     VAR(extinfo_showip, 0, 1, 1);
+    VAR(extinfo_showpriv, 0, 1, 2);
+    VAR(extinfo_showspy, 0, 0, 1);
+
     void extinfoplayer(ucharbuf &p, clientinfo *ci)
     {
         ucharbuf q = p;
@@ -46,7 +49,7 @@
         putint(q, ci->state.health);
         putint(q, 0);
         putint(q, ci->state.gunselect);
-        putint(q, ci->privilege);
+        putint(q, (extinfo_showpriv && (extinfo_showpriv > 1 || ci->canseemypriv(NULL))) ? ci->privilege : PRIV_NONE);
         putint(q, ci->state.state);
         uint ip = extinfo_showip ? getclientip(ci->clientnum) : 0;
         q.put((uchar*)&ip, 3);
@@ -106,7 +109,7 @@
                 if(cn >= 0)
                 {
                     loopv(clients) if(clients[i]->clientnum == cn) { ci = clients[i]; break; }
-                    if(!ci || ci->spy)
+                    if(!ci || (!extinfo_showspy && ci->spy))
                     {
                         putint(p, EXT_ERROR); //client requested by id was not found
                         sendserverinforeply(p);
@@ -119,11 +122,11 @@
                 ucharbuf q = p; //remember buffer position
                 putint(q, EXT_PLAYERSTATS_RESP_IDS); //send player ids following
                 if(ci) putint(q, ci->clientnum);
-                else loopv(clients) if(!clients[i]->spy) putint(q, clients[i]->clientnum);
+                else loopv(clients) if(extinfo_showspy || !clients[i]->spy) putint(q, clients[i]->clientnum);
                 sendserverinforeply(q);
 
                 if(ci) extinfoplayer(p, ci);
-                else loopv(clients) if(!clients[i]->spy) extinfoplayer(p, clients[i]);
+                else loopv(clients) if(extinfo_showspy || !clients[i]->spy) extinfoplayer(p, clients[i]);
                 return;
             }
 

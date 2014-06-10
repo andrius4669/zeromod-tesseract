@@ -163,7 +163,6 @@ extern bool calcspotscissor(const vec &origin, float radius, const vec &dir, int
 extern void screenquad();
 extern void screenquad(float sw, float sh);
 extern void screenquadflipped(float sw, float sh);
-extern void screenquadreorient(float sw, float sh, bool flipx, bool flipy, bool swapxy);
 extern void screenquad(float sw, float sh, float sw2, float sh2);
 extern void screenquadoffset(float x, float y, float w, float h);
 extern void screenquadoffset(float x, float y, float w, float h, float x2, float y2, float w2, float h2);
@@ -303,10 +302,6 @@ extern float shadowradius, shadowbias;
 extern int shadowside, shadowspot;
 extern matrix4 shadowmatrix;
 
-extern int rhinoq;
-
-extern void resetlights();
-extern void collectlights();
 extern void loaddeferredlightshaders();
 extern void cleardeferredlightshaders();
 extern void clearshadowcache();
@@ -324,6 +319,7 @@ extern bool useradiancehints();
 extern void renderradiancehints();
 extern void clearradiancehintscache();
 extern void cleanuplights();
+extern void workinoq();
 
 extern int calcbbsidemask(const vec &bbmin, const vec &bbmax, const vec &lightpos, float lightradius, float bias);
 extern int calcspheresidemask(const vec &p, float radius, float bias);
@@ -461,7 +457,9 @@ extern occludequery *newquery(void *owner);
 extern bool checkquery(occludequery *query, bool nowait = false);
 extern void resetqueries();
 extern int getnumqueries();
-extern void drawbb(const ivec &bo, const ivec &br, const vec &camera = camera1->o);
+extern void startbb(bool mask = true);
+extern void endbb(bool mask = true);
+extern void drawbb(const ivec &bo, const ivec &br);
 
 #define startquery(query) do { glBeginQuery_(GL_SAMPLES_PASSED, ((occludequery *)(query))->id); } while(0)
 #define endquery(query) do { glEndQuery_(GL_SAMPLES_PASSED); } while(0)
