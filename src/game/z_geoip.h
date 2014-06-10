@@ -254,15 +254,10 @@ void z_servcmd_geoip(int argc, char **argv, int sender)
         if(cn < 0)
         {
             cis.shrink(0);
-            loopvj(clients)
-            {
-                if(clients[j]->state.aitype!=AI_NONE) continue;
-                if(clients[j]->spy && !isadmin) continue;
-                cis.add(clients[j]);
-            }
+            loopvj(clients) if(!clients[j]->spy || isadmin) cis.add(clients[j]);
             break;
         }
-        ci = (clientinfo *)getclientinfo(cn);
+        ci = getinfo(cn);
         if(!ci || !ci->connected || (ci->spy && !isadmin)) goto fail;
         if(cis.find(ci)<0) cis.add(ci);
     }
@@ -273,7 +268,8 @@ void z_servcmd_geoip(int argc, char **argv, int sender)
 
     for(i = 0; i < cis.length(); i++)
     {
-        z_geoip_print(buf, cis[i], isadmin);
+        if(cis[i]->state.aitype==AI_NONE) z_geoip_print(buf, cis[i], isadmin);
+        else buf.setsize(0);
         if(buf.length() > 1) sendf(sender, 1, "ris", N_SERVMSG,
             tempformatstring("\f%c%s \f%cis connected from \f%c%s", c[0], colorname(cis[i]), c[1], c[2], buf.getbuf()));
         else sendf(sender, 1, "ris", N_SERVMSG,
