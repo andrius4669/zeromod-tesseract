@@ -254,7 +254,7 @@ void z_servcmd_geoip(int argc, char **argv, int sender)
         if(cn < 0)
         {
             cis.shrink(0);
-            loopvj(clients) if(clients[i]->state.aitype==AI_NONE && (!clients[j]->spy || isadmin)) cis.add(clients[j]);
+            loopvj(clients) if(clients[j]->state.aitype==AI_NONE && (!clients[j]->spy || isadmin)) cis.add(clients[j]);
             break;
         }
         ci = getinfo(cn);
