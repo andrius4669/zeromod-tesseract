@@ -1,5 +1,5 @@
 #ifndef Z_GEOIP_H
-#define Z_GEOIP_H 1
+#define Z_GEOIP_H
 
 #ifdef USE_GEOIP
 
@@ -9,22 +9,41 @@
 static GeoIP *z_gi = NULL, *z_gic = NULL;
 static bool z_geoip_reset_atexit = false;
 
-#endif //USE_GEOIP
+#ifndef _WIN32
+#define Z_GEOIP_COUNTRY_OPENMODE GEOIP_MMAP_CACHE
+#define Z_GEOIP_CITY_OPENMODE GEOIP_MMAP_CACHE
+#else
+#define Z_GEOIP_COUNTRY_OPENMODE GEOIP_INDEX_CACHE
+#define Z_GEOIP_CITY_OPENMODE GEOIP_INDEX_CACHE
+#endif
 
-static void z_reset_geoip()
+#endif // USE_GEOIP
+
+static void z_reset_geoip_country()
 {
 #ifdef USE_GEOIP
     if(z_gi) { GeoIP_delete(z_gi); z_gi = NULL; }
+#endif
+}
+
+static void z_reset_geoip_city()
+{
+#ifdef USE_GEOIP
     if(z_gic) { GeoIP_delete(z_gic); z_gic = NULL; }
 #endif
 }
 
-VARF(geoip_enable, 0, 0, 1, z_reset_geoip());
-VARF(geoip_country_enable, 0, 1, 1, z_reset_geoip());
-SVARF(geoip_country_database, "GeoIP.dat", z_reset_geoip());
-VARF(geoip_city_enable, 0, 0, 1, z_reset_geoip());
-SVARF(geoip_city_database, "GeoLiteCity.dat", z_reset_geoip());
+static void z_reset_geoip()
+{
+    z_reset_geoip_country();
+    z_reset_geoip_city();
+}
 
+VARF(geoip_enable, 0, 0, 1, z_reset_geoip());
+VARF(geoip_country_enable, 0, 1, 1, z_reset_geoip_country());
+SVARF(geoip_country_database, "GeoIP.dat", z_reset_geoip_country());
+VARF(geoip_city_enable, 0, 0, 1, z_reset_geoip_city());
+SVARF(geoip_city_database, "GeoLiteCity.dat", z_reset_geoip_city());
 VAR(geoip_show_ip, 0, 2, 2);
 VAR(geoip_show_city, 0, 0, 2);
 VAR(geoip_show_region, 0, 0, 2);
@@ -64,20 +83,22 @@ static void z_init_geoip()
     if(geoip_country_enable && geoip_country_database[0] && !z_gi)
     {
         const char *found = findfile(geoip_country_database, "rb");
-        if(found) z_gi = GeoIP_open(found, GEOIP_INDEX_CACHE);
+        if(found) z_gi = GeoIP_open(found, Z_GEOIP_COUNTRY_OPENMODE);
         if(z_gi) GeoIP_set_charset(z_gi, GEOIP_CHARSET_UTF8);
         else logoutf("WARNING: could not open geoip country database file \"%s\"", geoip_country_database);
     }
     if(geoip_city_enable && geoip_city_database[0] && !z_gic)
     {
         const char *found = findfile(geoip_city_database, "rb");
-        if(found) z_gic = GeoIP_open(found, GEOIP_INDEX_CACHE);
+        if(found) z_gic = GeoIP_open(found, Z_GEOIP_CITY_OPENMODE);
         if(z_gic) GeoIP_set_charset(z_gic, GEOIP_CHARSET_UTF8);
         else logoutf("WARNING: could not open geoip city database file \"%s\"", geoip_city_database);
     }
-#else //USE_GEOIP
+#undef Z_GEOIP_COUNTRY_OPENMODE
+#undef Z_GEOIP_CITY_OPENMODE
+#else // USE_GEOIP
     if(geoip_country_enable || geoip_city_enable) logoutf("WARNING: GeoIP support was not compiled in");
-#endif //USE_GEOIP
+#endif // USE_GEOIP
 }
 
 #ifdef USE_GEOIP
@@ -282,4 +303,4 @@ fail:
 SCOMMANDN(geoip, PRIV_NONE, z_servcmd_geoip);
 SCOMMANDNH(getip, PRIV_NONE, z_servcmd_geoip);
 
-#endif //Z_GEOIP_H
+#endif // Z_GEOIP_H
