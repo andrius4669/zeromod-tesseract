@@ -178,60 +178,112 @@ void z_geoip_resolveclient(clientinfo *ci)
 #endif //USE_GEOIP
 }
 
+static void z_geoip_gencolors(char *cbuf)
+{
+    size_t slen = strlen(geoip_color_scheme), len = min<size_t>(slen, 3);
+    for(size_t i = 0; i < len; i++)
+    {
+        cbuf[i] = geoip_color_scheme[i];
+        if(cbuf[i] < '0' || cbuf[i] > '7') cbuf[i] = '7';
+    }
+    for(size_t i = len; i < 3; i++) cbuf[i] = '7';
+}
+
+static void z_geoip_print(vector<char> &buf, clientinfo *ci, bool admin)
+{
+    buf.setsize(0);
+    const char *comp[] =
+    {
+        (admin ? geoip_show_ip : geoip_show_ip == 1) ? getclienthostname(ci->clientnum) : NULL,
+        (admin ? geoip_show_city : geoip_show_city == 1) ? ci->geoip_city : NULL,
+        (admin ? geoip_show_region : geoip_show_region == 1) ? ci->geoip_region : NULL,
+        (admin ? geoip_show_country : geoip_show_country == 1) ? ci->geoip_country : NULL,
+        (admin ? geoip_show_continent : geoip_show_continent == 1) ? ci->geoip_continent : NULL
+    };
+    int lastc = -1;
+    loopi(sizeof(comp)/sizeof(comp[0])) if(comp[i])
+    {
+        if(geoip_skip_duplicates && lastc >= 0 && !strcmp(comp[i], comp[lastc])) continue;
+        lastc = i;
+        if(buf.length()) { buf.add(','); buf.add(' '); }
+        buf.put(comp[i], strlen(comp[i]));
+    }
+    buf.add('\0');
+}
+
 void z_geoip_show(clientinfo *ci)
 {
     if(!geoip_enable || !ci) return;
-    char colors[3] = { '7', '7', '7' };
-    size_t len = min<size_t>(strlen(geoip_color_scheme), 3);
-    for(size_t i = 0; i < len; i++)
-    {
-        colors[i] = geoip_color_scheme[i];
-        if(colors[i] < '0' || colors[i] > '7') colors[i] = '7';
-    }
-    
-    string ncstr, acstr;
-    ncstr[0] = acstr[0] = '\0';
-    const char *components[] = { getclienthostname(ci->clientnum), ci->geoip_city, ci->geoip_region, ci->geoip_country, ci->geoip_continent };
-    bool n_components[] = { geoip_show_ip == 1, geoip_show_city == 1, geoip_show_region == 1, geoip_show_country == 1, geoip_show_continent == 1 };
-    bool a_components[] = { geoip_show_ip != 0, geoip_show_city != 0, geoip_show_region != 0, geoip_show_country != 0, geoip_show_continent != 0 };
-    loopi(2)
-    {
-        bool *comp = i ? n_components : a_components;
-        char *buf = i ? ncstr : acstr;
-        int lastc = -1;
-        loopj(sizeof(components)/sizeof(components[0]))
-        {
-            const char *str = comp[j] ? components[j] : NULL;
-            if(str)
-            {
-                if(geoip_skip_duplicates && lastc >= 0 && !strcmp(str, components[lastc])) continue;
-                lastc = j;
-                if(buf[0]) concatstring(buf, ", ");
-                concatstring(buf, str);
-            }
-        }
-    }
 
-    loopi(2)
+    char colors[3];
+    z_geoip_gencolors(colors);
+
+    vector<char> cbufs[2];
+    packetbuf *qpacks[2] = { NULL, NULL };
+    for(int i = demorecord ? -1 : 0; i < clients.length(); i++) if(i < 0 || clients[i]->state.aitype==AI_NONE)
     {
-        char *s = i ? ncstr : acstr;
-        if(s[0])
+        bool isadmin = i >= 0 && (clients[i]->privilege >= PRIV_ADMIN || clients[i]->local);
+        int idx = isadmin ? 1 : 0;
+        if(!qpacks[idx])
         {
-            defformatstring(buf, "\fs\f%c%s \f%cconnected from \f%c%s\fr", colors[0], colorname(ci), colors[1], colors[2], s);
-            packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
+            if(cbufs[idx].empty()) z_geoip_print(cbufs[i], ci, isadmin);
+            if(cbufs[idx].length() <= 1) continue;
+            qpacks[idx] = new packetbuf(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
+            packetbuf &p = *qpacks[idx];
             putint(p, N_SERVMSG);
-            sendstring(buf, p);
-            ENetPacket *ep = p.finalize();
-            if(i) recordpacket(1, ep->data, ep->dataLength);
+            sendstring(tempformatstring("\f%c%s \f%cconnected from \f%c%s", colors[0], colorname(ci), colors[1], colors[2], cbufs[idx].getbuf()), p);
+            p.finalize();
+        }
+        if(i >= 0) sendpacket(clients[i]->clientnum, 1, qpacks[idx]->packet);
+        else recordpacket(1, qpacks[idx]->packet->data, qpacks[idx]->packet->dataLength);
+    }
+    loopi(2) DELETEP(qpacks[i]);
+}
+
+void z_servcmd_geoip(int argc, char **argv, int sender)
+{
+    int i, cn;
+    clientinfo *ci, *senderci = getinfo(sender);
+    vector<clientinfo *> cis;
+    vector<char> buf;
+    char c[3];
+    bool isadmin = senderci->privilege>=PRIV_ADMIN || senderci->local;
+    for(i = 1; i < argc; i++)
+    {
+        if(!z_parseclient(argv[i], &cn)) goto fail;
+        if(cn < 0)
+        {
+            cis.shrink(0);
             loopvj(clients)
             {
-                clientinfo *c = clients[j];
-                if(c->state.aitype != AI_NONE) continue;
-                bool isadmin = c->privilege >= PRIV_ADMIN || c->local;
-                if(isadmin == !i) sendpacket(c->clientnum, 1, ep);
+                if(clients[j]->state.aitype!=AI_NONE) continue;
+                if(clients[j]->spy && !isadmin) continue;
+                cis.add(clients[j]);
             }
+            break;
         }
+        ci = (clientinfo *)getclientinfo(cn);
+        if(!ci || !ci->connected || (ci->spy && !isadmin)) goto fail;
+        if(cis.find(ci)<0) cis.add(ci);
     }
+
+    if(cis.empty()) { sendf(sender, 1, "ris", N_SERVMSG, "please specify client number"); return; }
+
+    z_geoip_gencolors(c);
+
+    for(i = 0; i < cis.length(); i++)
+    {
+        z_geoip_print(buf, cis[i], isadmin);
+        if(buf.length() > 1) sendf(sender, 1, "ris", N_SERVMSG,
+            tempformatstring("\f%c%s \f%cis connected from \f%c%s", c[0], colorname(cis[i]), c[1], c[2], buf.getbuf()));
+        else sendf(sender, 1, "ris", N_SERVMSG,
+            tempformatstring("\f%cfailed to get any geoip information about %s", c[1], colorname(cis[i])));
+    }
+    return;
+fail:
+    sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[i]));
 }
+SCOMMANDN(geoip, PRIV_NONE, z_servcmd_geoip);
+SCOMMANDNH(getip, PRIV_NONE, z_servcmd_geoip);
 
 #endif //Z_GEOIP_H
