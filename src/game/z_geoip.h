@@ -254,7 +254,7 @@ void z_servcmd_geoip(int argc, char **argv, int sender)
         if(cn < 0)
         {
             cis.shrink(0);
-            loopvj(clients) if(!clients[j]->spy || isadmin) cis.add(clients[j]);
+            loopvj(clients) if(clients[i]->state.aitype==AI_NONE && (!clients[j]->spy || isadmin)) cis.add(clients[j]);
             break;
         }
         ci = getinfo(cn);
@@ -273,7 +273,7 @@ void z_servcmd_geoip(int argc, char **argv, int sender)
         if(buf.length() > 1) sendf(sender, 1, "ris", N_SERVMSG,
             tempformatstring("\f%c%s \f%cis connected from \f%c%s", c[0], colorname(cis[i]), c[1], c[2], buf.getbuf()));
         else sendf(sender, 1, "ris", N_SERVMSG,
-            tempformatstring("\f%cfailed to get any geoip information about %s", c[1], colorname(cis[i])));
+            tempformatstring("\f%cfailed to get any geoip information about \f%c%s", c[1], c[0], colorname(cis[i])));
     }
     return;
 fail:
