@@ -52,6 +52,7 @@ fi
 if [ -x ${TESS_BIN}/${SYSTEM_NAME}${MACHINE_NAME}server ]
 then
   cd ${TESS_DATA}
+  ulimit -c unlimited
   exec ${TESS_BIN}/${SYSTEM_NAME}${MACHINE_NAME}server ${TESS_OPTIONS} "$@"
 else
   echo "Your platform does not have a pre-compiled Tesseract server."

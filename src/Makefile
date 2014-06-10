@@ -1,4 +1,6 @@
 CXXFLAGS= -O3 -fomit-frame-pointer -ffast-math
+# for debugging...
+#CXXFLAGS= -O0 -ggdb3 -pipe -fno-inline -fstack-protector -fsanitize=address
 override CXXFLAGS+= -Wall -fsigned-char -fno-exceptions -fno-rtti
 
 PLATFORM= $(shell uname -s)

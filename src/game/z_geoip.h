@@ -247,7 +247,7 @@ void z_geoip_show(clientinfo *ci)
         int idx = isadmin ? 1 : 0;
         if(!qpacks[idx])
         {
-            if(cbufs[idx].empty()) z_geoip_print(cbufs[i], ci, isadmin);
+            if(cbufs[idx].empty()) z_geoip_print(cbufs[idx], ci, isadmin);
             if(cbufs[idx].length() <= 1) continue;
             qpacks[idx] = new packetbuf(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
             packetbuf &p = *qpacks[idx];
