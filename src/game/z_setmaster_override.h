@@ -2,8 +2,10 @@
 #define Z_SETMASTER_OVERRIDE
 
 #include "z_triggers.h"
+#include "z_servercommands.h"
 
 VAR(defaultmastermode, -1, 0, 3);
+SVAR(masterpass, "");
 
 static void z_trigger_defaultmastermode(int type)
 {
@@ -24,6 +26,7 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
     {
         bool haspass = adminpass[0] && checkpassword(ci, adminpass, pass);
         int wantpriv = ci->local || haspass ? PRIV_ADMIN : authpriv;
+        if(!force && wantpriv <= PRIV_MASTER && masterpass[0] && checkpassword(ci, masterpass, pass)) force = true;
         if(ci->privilege)
         {
             if(wantpriv <= ci->privilege) return true;
@@ -81,10 +84,10 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
     }
     else logoutf("master: %s (%d) %s %s", ci->name, ci->clientnum, val ? "claimed" : "relinquished", name);
     
-    loopv(clients)
+    for(int i = demorecord ? -1 : 0; i < clients.length(); i++)
     {
-        clientinfo *cj = clients[i];
-        if(cj->state.aitype!=AI_NONE) continue;
+        clientinfo *cj = i >= 0 ? clients[i] : NULL;
+        if(cj && cj->state.aitype!=AI_NONE) continue;
         // 1 case: client can see that ci claimed
         // 2 case: client could see old privilege, and ci relinquished
         // action: send out message and new privileges
@@ -101,7 +104,8 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
                 putint(p, clients[j]->privilege);
             }
             putint(p, -1);
-            sendpacket(cj->clientnum, 1, p.finalize());
+            if(cj) sendpacket(cj->clientnum, 1, p.finalize());
+            else { p.finalize(); recordpacket(1, p.packet->data, p.packet->dataLength); }
         }
         // 3 case: client couldn't see old privilege, but relinquish changed mastermode
         // action: send out mastermode only
@@ -110,11 +114,12 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
             packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
             putint(p, N_MASTERMODE);
             putint(p, mastermode);
-            sendpacket(cj->clientnum, 1, p.finalize());
+            if(cj) sendpacket(cj->clientnum, 1, p.finalize());
+            else { p.finalize(); recordpacket(1, p.packet->data, p.packet->dataLength); }
         }
         // 4 case: client could see old privilege, but can not see new privilege after claim
         // action: send fake relinquish message and new privileges
-        else if(val && ci->canseemypriv(cj, opriv) && !ci->canseemypriv(cj))
+        else if(val && opriv >= PRIV_MASTER && ci->canseemypriv(cj, opriv) && !ci->canseemypriv(cj))
         {
             packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
             putint(p, N_SERVMSG);
@@ -127,7 +132,8 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
                 putint(p, clients[j]->privilege);
             }
             putint(p, -1);
-            sendpacket(cj->clientnum, 1, p.finalize());
+            if(cj) sendpacket(cj->clientnum, 1, p.finalize());
+            else { p.finalize(); recordpacket(1, p.packet->data, p.packet->dataLength); }
         }
     }
     
@@ -135,5 +141,36 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
     return true;
 }
 
+void z_servcmd_invpriv(int argc, char **argv, int sender)
+{
+    clientinfo *ci = getinfo(sender);
+    int val = (argc >= 2 && argv[1] && *argv[1]) ? clamp(atoi(argv[1]), 0, 1) : -1;
+    if(val >= 0)
+    {
+        // if client has priv and privilege visibility changed, resend privs
+        if(ci->privilege >= PRIV_MASTER) for(int i = demorecord ? -1 : 0; i < clients.length(); i++)
+        {
+            clientinfo *cj = i >= 0 ? clients[i] : NULL;
+            if(cj && cj->state.aitype!=AI_NONE) continue;
+            if(ci->canseemypriv(cj) == ci->canseemypriv(cj, -1, val)) continue;
+            packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
+            putint(p, N_CURRENTMASTER);
+            putint(p, mastermode);
+            loopvj(clients) if(clients[j]->privilege >= PRIV_MASTER && (ci!=clients[j] ? clients[j]->canseemypriv(cj) : ci->canseemypriv(cj, -1, val)))
+            {
+                putint(p, clients[j]->clientnum);
+                putint(p, clients[j]->privilege);
+            }
+            putint(p, -1);
+            if(cj) sendpacket(cj->clientnum, 1, p.finalize());
+            else { p.finalize(); recordpacket(1, p.packet->data, p.packet->dataLength); }
+        }
+        ci->invpriv = val!=0;
+        sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("invpriv %s", val ? "enabled" : "disabled"));
+    }
+    else sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("invpriv is %s", ci->invpriv ? "enabled" : "disabled"));
+}
+SCOMMANDNA(invpriv, PRIV_NONE, z_servcmd_invpriv, 1);
+SCOMMANDNAH(hidepriv, PRIV_NONE, z_servcmd_invpriv, 1);
 
 #endif // Z_SETMASTER_OVERRIDE

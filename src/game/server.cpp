@@ -370,13 +370,13 @@ namespace server
             else return gameoffset + clientmillis;
         }
 
-        bool isinvpriv(int priv) const { return invpriv && priv > PRIV_MASTER; }
+        bool isinvpriv(int priv, int inv = -1) const { return (inv < 0 ? invpriv : inv!=0) && priv > PRIV_MASTER; }
 
-        bool canseemypriv(clientinfo *ci, int priv = -1) const
+        bool canseemypriv(clientinfo *ci, int priv = -1, int inv = -1) const
         {
             if(priv < 0) priv = privilege;
             if(spy) return ci && clientnum == ci->clientnum;
-            if(isinvpriv(priv)) return ci && (ci->privilege >= priv || ci->local || ci->clientnum == clientnum);
+            if(isinvpriv(priv, inv)) return ci && (ci->privilege >= priv || ci->local || ci->clientnum == clientnum);
             return true;
         }
 

@@ -9,12 +9,20 @@
 static GeoIP *z_gi = NULL, *z_gic = NULL;
 static bool z_geoip_reset_atexit = false;
 
-#ifndef _WIN32
-#define Z_GEOIP_COUNTRY_OPENMODE GEOIP_MMAP_CACHE
-#define Z_GEOIP_CITY_OPENMODE GEOIP_MMAP_CACHE
-#else
-#define Z_GEOIP_COUNTRY_OPENMODE GEOIP_INDEX_CACHE
-#define Z_GEOIP_CITY_OPENMODE GEOIP_INDEX_CACHE
+#ifndef GEOIP_OPENMODE
+    #ifndef _WIN32
+        #define GEOIP_OPENMODE GEOIP_MMAP_CACHE
+    #else
+        #define GEOIP_OPENMODE GEOIP_INDEX_CACHE
+    #endif
+#endif
+
+#ifndef GEOIP_COUNTRY_OPENMODE
+    #define GEOIP_COUNTRY_OPENMODE GEOIP_OPENMODE
+#endif
+
+#ifndef GEOIP_CITY_OPENMODE
+    #define GEOIP_CITY_OPENMODE GEOIP_OPENMODE
 #endif
 
 #endif // USE_GEOIP
@@ -83,19 +91,20 @@ static void z_init_geoip()
     if(geoip_country_enable && geoip_country_database[0] && !z_gi)
     {
         const char *found = findfile(geoip_country_database, "rb");
-        if(found) z_gi = GeoIP_open(found, Z_GEOIP_COUNTRY_OPENMODE);
+        if(found) z_gi = GeoIP_open(found, GEOIP_COUNTRY_OPENMODE);
         if(z_gi) GeoIP_set_charset(z_gi, GEOIP_CHARSET_UTF8);
         else logoutf("WARNING: could not open geoip country database file \"%s\"", geoip_country_database);
     }
     if(geoip_city_enable && geoip_city_database[0] && !z_gic)
     {
         const char *found = findfile(geoip_city_database, "rb");
-        if(found) z_gic = GeoIP_open(found, Z_GEOIP_CITY_OPENMODE);
+        if(found) z_gic = GeoIP_open(found, GEOIP_CITY_OPENMODE);
         if(z_gic) GeoIP_set_charset(z_gic, GEOIP_CHARSET_UTF8);
         else logoutf("WARNING: could not open geoip city database file \"%s\"", geoip_city_database);
     }
-#undef Z_GEOIP_COUNTRY_OPENMODE
-#undef Z_GEOIP_CITY_OPENMODE
+    #undef GEOIP_OPENMODE
+    #undef GEOIP_COUNTRY_OPENMODE
+    #undef GEOIP_CITY_OPENMODE
 #else // USE_GEOIP
     if(geoip_country_enable || geoip_city_enable) logoutf("WARNING: GeoIP support was not compiled in");
 #endif // USE_GEOIP
@@ -196,7 +205,7 @@ void z_geoip_resolveclient(clientinfo *ci)
             GeoIPRecord_delete(gir);
         }
     }
-#endif //USE_GEOIP
+#endif // USE_GEOIP
 }
 
 static void z_geoip_gencolors(char *cbuf)
@@ -279,7 +288,7 @@ void z_servcmd_geoip(int argc, char **argv, int sender)
             break;
         }
         ci = getinfo(cn);
-        if(!ci || !ci->connected || (ci->spy && !isadmin)) goto fail;
+        if(!ci || ((!ci->connected || ci->spy) && !isadmin)) goto fail;
         if(cis.find(ci)<0) cis.add(ci);
     }
 

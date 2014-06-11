@@ -101,3 +101,7 @@ teamkillkick "*" 7 30
 
 // servcmd_chars ""				// defines which characters makes server interept text message as command
 servcmd_chars "#!\"
+
+// password that allows you to gain master by "setmaster password_here"
+// local authkeys are more secure than this and should be used instead if possible
+// masterpass ""
