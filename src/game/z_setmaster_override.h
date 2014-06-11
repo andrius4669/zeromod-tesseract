@@ -70,12 +70,13 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
         z_exectrigger(Z_TRIGGER_NOMASTER);
     }
     string msg;
+    const bool inv_ = val ? ci->isinvpriv(ci->privilege) : ci->isinvpriv(opriv);
     if(val && authname)
     {
-        if(authdesc && authdesc[0]) formatstring(msg, "%s claimed %s as '\fs\f5%s\fr' [\fs\f0%s\fr]", colorname(ci), name, authname, authdesc);
-        else formatstring(msg, "%s claimed %s as '\fs\f5%s\fr'", colorname(ci), name, authname);
+        if(authdesc && authdesc[0]) formatstring(msg, "%s claimed %s%s as '\fs\f5%s\fr' [\fs\f0%s\fr]", colorname(ci), inv_ ? "invisible " : "", name, authname, authdesc);
+        else formatstring(msg, "%s claimed %s%s as '\fs\f5%s\fr'", colorname(ci), inv_ ? "invisible " : "", name, authname);
     }
-    else formatstring(msg, "%s %s %s", colorname(ci), val ? "claimed" : "relinquished", name);
+    else formatstring(msg, "%s %s %s%s", colorname(ci), val ? "claimed" : "relinquished", inv_ ? "invisible " : "", name);
     
     if(val && authname)
     {
@@ -123,7 +124,7 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
         {
             packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
             putint(p, N_SERVMSG);
-            sendstring(tempformatstring("%s %s %s", colorname(ci), "relinquished", privname(opriv)), p);
+            sendstring(tempformatstring("%s %s %s%s", colorname(ci), "relinquished", ci->isinvpriv(opriv) ? "invisible " : "", privname(opriv)), p);
             putint(p, N_CURRENTMASTER);
             putint(p, mastermode);
             loopvj(clients) if(clients[j]->privilege >= PRIV_MASTER && clients[j]->canseemypriv(cj))
