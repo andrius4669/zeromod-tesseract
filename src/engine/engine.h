@@ -4,6 +4,10 @@
 #include "cube.h"
 #include "world.h"
 
+#if defined(STANDALONE) && defined(OCTASERV)
+#include "z_octa.h"
+#endif
+
 #ifndef STANDALONE
 
 #include "octa.h"

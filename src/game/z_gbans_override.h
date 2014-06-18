@@ -11,7 +11,7 @@ vector<gbaninfo> gbans;
 
 static void cleargbans(int m = -1)
 {
-    if(m < 0) loopvrev(gbans) if(gbans[i].master >= 0) gbans.removeunordered(i);
+    if(m < 0) loopvrev(gbans) { if(gbans[i].master >= 0) gbans.removeunordered(i); }
     else loopvrev(gbans) if(gbans[i].master == m) gbans.removeunordered(i);
 }
 

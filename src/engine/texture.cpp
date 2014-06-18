@@ -2,6 +2,7 @@
 
 #include "engine.h"
 
+#ifndef STANDALONE
 #ifdef __APPLE__
   #include "SDL2_image/SDL_image.h"
 #else
@@ -1465,6 +1466,7 @@ bool settexture(const char *name, int clamp)
     glBindTexture(GL_TEXTURE_2D, t->id);
     return t != notexture;
 }
+#endif
 
 vector<VSlot *> vslots;
 vector<Slot *> slots;
@@ -2068,6 +2070,7 @@ void decaldepth(float *depth, float *fade)
 }
 COMMAND(decaldepth, "ff");
 
+#ifndef STANDALONE
 static void addglow(ImageData &c, ImageData &g, const vec &glowcolor)
 {
     if(g.bpp < 3)
@@ -2114,6 +2117,7 @@ static void collapsespec(ImageData &s)
     else readwritetex(d, s, { dst[0] = src[0]; });
     s.replace(d);
 }
+#endif
 
 int Slot::findtextype(int type, int last) const
 {
@@ -2141,6 +2145,7 @@ int DecalSlot::cancombine(int type) const
     }
 }
 
+#ifndef STANDALONE
 static void addname(vector<char> &key, Slot &slot, Slot::Tex &t, bool combined = false, const char *prefix = NULL)
 {
     if(combined) key.add('&');
@@ -2228,6 +2233,7 @@ void Slot::load()
     }
     loaded = true;
 }
+#endif
 
 MatSlot &lookupmaterialslot(int index, bool load)
 {
@@ -2272,6 +2278,7 @@ DecalSlot &lookupdecalslot(int index, bool load)
     return s;
 }
 
+#ifndef STANDALONE
 void linkslotshaders()
 {
     loopv(slots) if(slots[i]->loaded) linkslotshader(*slots[i]);
@@ -3395,4 +3402,4 @@ COMMAND(flipnormalmapy, "ss");
 COMMAND(mergenormalmaps, "ss");
 COMMAND(normalizenormalmap, "ss");
 COMMAND(removealphachannel, "ss");
-
+#endif

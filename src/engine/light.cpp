@@ -259,6 +259,7 @@ static void clearsurfaces(cube *c)
     }
 }
 
+#ifndef STANDALONE
 #define LIGHTCACHESIZE 1024
 
 static struct lightcacheentry
@@ -329,9 +330,11 @@ const vector<int> &checklightcache(int x, int y)
     lce.y = y;
     return lce.lights;
 }
+#endif
 
 static uint lightprogress = 0;
 
+#ifndef STANDALONE
 bool calclight_canceled = false;
 volatile bool check_calclight_progress = false;
 
@@ -351,6 +354,7 @@ void show_calclight_progress()
 
     renderprogress(bar1, text1);
 }
+#endif
 
 static void calcsurfaces(cube &c, const ivec &co, int size, int usefacemask, int preview = 0)
 {
@@ -377,11 +381,14 @@ static void calcsurfaces(cube &c, const ivec &co, int size, int usefacemask, int
             continue;
         }
 
+        VSlot &vslot = lookupvslot(c.texture[i], false);
+#if 0
         VSlot &vslot = lookupvslot(c.texture[i], false),
              *layer = vslot.layer && !(c.material&MAT_ALPHA) ? &lookupvslot(vslot.layer, false) : NULL;
         Shader *shader = vslot.slot->shader;
         int shadertype = shader->type;
         if(layer) shadertype |= layer->slot->shader->type;
+#endif
 
         surfaceinfo &surf = surfaces[i];
         vertinfo *curlitverts = &litverts[numlitverts];
@@ -511,6 +518,7 @@ static void calcsurfaces(cube *c, const ivec &co, int size)
     }
 }
 
+#ifndef STANDALONE
 static inline bool previewblends(cube &c, const ivec &o, int size)
 {
     if(isempty(c) || c.material&MAT_ALPHA) return false;
@@ -568,14 +576,17 @@ void previewblends(const ivec &bo, const ivec &bs)
     if(previewblends(worldroot, ivec(0, 0, 0), worldsize/2, bo, bs))
         commitchanges(true);
 }
+#endif
 
 extern int filltjoints;
 
+#ifndef STANDALONE
 static Uint32 calclighttimer(Uint32 interval, void *param)
 {
     check_calclight_progress = true;
     return interval;
 }
+#endif
 
 void calclight()
 {
@@ -585,23 +596,29 @@ void calclight()
     clearlightcache();
     clearsurfaces(worldroot);
     lightprogress = 0;
+#ifndef STANDALONE
     calclight_canceled = false;
     check_calclight_progress = false;
     SDL_TimerID timer = SDL_AddTimer(250, calclighttimer, NULL);
     Uint32 start = SDL_GetTicks();
+#endif
     calcnormals(filltjoints > 0);
     calcsurfaces(worldroot, ivec(0, 0, 0), worldsize >> 1);
     clearnormals();
+#ifndef STANDALONE
     Uint32 end = SDL_GetTicks();
     if(timer) SDL_RemoveTimer(timer);
+#endif
     initlights();
     renderbackground("lighting done...");
     allchanged();
+#ifndef STANDALONE
     if(calclight_canceled)
         conoutf("calclight aborted");
     else
         conoutf("computed lighting (%.1f seconds)",
             (end - start) / 1000.0f);
+#endif
 }
 
 void mpcalclight(bool local)
@@ -613,6 +630,7 @@ void mpcalclight(bool local)
 
 ICOMMAND(calclight, "", (), mpcalclight(true));
 
+#ifndef STANDALONE
 VARF(fullbright, 0, 0, 1, initlights());
 VARF(fullbrightlevel, 0, 160, 255, initlights());
 
@@ -691,4 +709,4 @@ void lightreaching(const vec &target, vec &color, vec &dir, bool fast, extentity
     if(dir.iszero()) dir = vec(0, 0, 1);
     else dir.normalize();
 }
-
+#endif

@@ -1,5 +1,6 @@
 #include "engine.h"
 
+#ifndef STANDALONE
 extern int outline;
 
 bool boxoutline = false;
@@ -57,6 +58,7 @@ void boxsgrid(int orient, vec o, vec s, int g)
     }
     xtraverts += gle::end();
 }
+#endif
 
 selinfo sel, lastsel, savedsel;
 
@@ -123,6 +125,7 @@ void cancelsel()
     entcancel();
 }
 
+#ifndef STANDALONE
 void toggleedit(bool force)
 {
     if(!force)
@@ -163,6 +166,7 @@ bool noedit(bool view, bool msg)
     if(!viewable && msg) conoutf(CON_ERROR, "selection not in view");
     return !viewable;
 }
+#endif
 
 void reorient()
 {
@@ -291,6 +295,7 @@ extern bool hoveringonent(int ent, int orient);
 extern void renderentselection(const vec &o, const vec &ray, bool entmoving);
 extern float rayent(const vec &o, const vec &ray, float radius, int mode, int size, int &orient, int &ent);
 
+#ifndef STANDALONE
 VAR(gridlookup, 0, 0, 1);
 VAR(passthroughcube, 0, 1, 1);
 
@@ -495,6 +500,7 @@ void tryedit()
     if(!editmode || hidehud || mainmenu) return;
     if(blendpaintmode) trypaintblendmap();
 }
+#endif
 
 //////////// ready changes to vertex arrays ////////////
 
@@ -794,6 +800,7 @@ void editredo() { swapundo(redos, undos, "redo"); }
 
 vector<editinfo *> editinfos;
 editinfo *localedit = NULL;
+#endif
 
 template<class B>
 static void packcube(cube &c, B &buf)
@@ -929,6 +936,7 @@ void freeeditinfo(editinfo *&e)
     e = NULL;
 }
 
+#ifndef STANDALONE
 struct prefabheader
 {
     char magic[4];
@@ -998,6 +1006,7 @@ void saveprefab(char *name)
     conoutf("wrote prefab file %s", filename);
 }
 COMMAND(saveprefab, "s");
+#endif
 
 void pasteblock(block3 &b, selinfo &sel, bool local)
 {
@@ -1009,6 +1018,7 @@ void pasteblock(block3 &b, selinfo &sel, bool local)
     sel.orient = o;
 }
 
+#ifndef STANDALONE
 prefab *loadprefab(const char *name, bool msg = true)
 {
    prefab *b = prefabs.access(name);
@@ -1041,6 +1051,7 @@ void pasteprefab(char *name)
     if(b) pasteblock(*b->copy, sel, true);
 }
 COMMAND(pasteprefab, "s");
+#endif
 
 struct prefabmesh
 {

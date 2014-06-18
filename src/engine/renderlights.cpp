@@ -1,5 +1,6 @@
 #include "engine.h"
 
+#ifndef STANDALONE
 int gw = -1, gh = -1, bloomw = -1, bloomh = -1, lasthdraccum = 0;
 GLuint gfbo = 0, gdepthtex = 0, gcolortex = 0, gnormaltex = 0, gglowtex = 0, gdepthrb = 0, gstencilrb = 0;
 bool gdepthinit = false;
@@ -223,6 +224,7 @@ void cleanupao()
     clearaoshaders();
     clearbilateralshaders();
 }
+#endif
 
 VARFP(ao, 0, 1, 1, { cleanupao(); cleardeferredlightshaders(); });
 FVARR(aoradius, 0, 5, 256);
@@ -249,6 +251,7 @@ VARFP(aotaps, 1, 5, 12, cleanupao());
 VARF(aoderivnormal, 0, 0, 1, cleanupao());
 VAR(debugao, 0, 0, 1);
 
+#ifndef STANDALONE
 void initao()
 {
     aodepthformat = aofloatdepth && hasTRG && hasTF ? aofloatdepth : 0;
@@ -1460,6 +1463,7 @@ void cleanupradiancehints()
 
     clearrhshaders();
 }
+#endif
 
 VARF(rhrect, 0, 0, 1, cleanupradiancehints());
 VARF(rhsplits, 1, 2, RH_MAXSPLITS, { cleardeferredlightshaders(); cleanupradiancehints(); });
@@ -1491,6 +1495,7 @@ FVARFR(giscale, 0, 1.5f, 1e3f, { cleardeferredlightshaders(); if(!giscale) clean
 FVARR(giaoscale, 0, 3, 1e3f);
 VARFP(gi, 0, 1, 1, { cleardeferredlightshaders(); cleanupradiancehints(); });
 
+#ifndef STANDALONE
 VAR(debugrsm, 0, 0, 2);
 void viewrsm()
 {
@@ -4558,4 +4563,5 @@ void cleanuplights()
     cleanuplightsphere();
     cleanupaa();
 }
+#endif
 

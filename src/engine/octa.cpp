@@ -1787,12 +1787,14 @@ static void invalidatemerges(cube &c)
     }
     if(c.ext)
     {
+#ifndef STANDALONE
         if(c.ext->va)
         {
             if(!(c.ext->va->hasmerges&(MERGE_PART | MERGE_ORIGIN))) return;
             destroyva(c.ext->va);
             c.ext->va = NULL;
         }
+#endif
         if(c.ext->tjoints >= 0) c.ext->tjoints = -1;
     }
     if(c.children) loopi(8) invalidatemerges(c.children[i]);

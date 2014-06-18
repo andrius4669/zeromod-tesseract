@@ -1,6 +1,8 @@
-CXXFLAGS= -O3 -fomit-frame-pointer -ffast-math
+#CXXFLAGS= -O3 -fomit-frame-pointer -ffast-math
 # for debugging...
 #CXXFLAGS= -O0 -ggdb3 -pipe -fno-inline -fstack-protector -fsanitize=address
+CXX=clang++
+CXXFLAGS= -O0 -pipe
 override CXXFLAGS+= -Wall -fsigned-char -fno-exceptions -fno-rtti
 
 PLATFORM= $(shell uname -s)
@@ -153,6 +155,21 @@ SERVER_OBJS= \
 	standalone/engine/worldio.o \
 	standalone/game/entities.o \
 	standalone/game/server.o
+
+ifneq (,$(OCTASERV))
+SERVER_OBJS+= \
+	standalone/engine/blend.o \
+	standalone/engine/light.o \
+	standalone/engine/normal.o \
+	standalone/engine/octa.o \
+	standalone/engine/octaedit.o \
+	standalone/engine/octarender.o \
+	standalone/engine/physics.o \
+	standalone/engine/renderlights.o \
+	standalone/engine/texture.o \
+	standalone/engine/world.o
+SERVER_INCLUDES+= -DOCTASERV
+endif
 
 SERVER_PCH= standalone/shared/cube.h.gch standalone/engine/engine.h.gch standalone/game/game.h.gch
 
