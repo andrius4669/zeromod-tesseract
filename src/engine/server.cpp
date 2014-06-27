@@ -539,10 +539,11 @@ void checkserversockets()        // reply all server info requests
     ENetSocket maxsock = ENET_SOCKET_NULL;
     loopv(mss) if(mss[i].mastersock != ENET_SOCKET_NULL)
     {
-        ENetSocket mastersock = mss[i].mastersock;
+        ENetSocket &mastersock = mss[i].mastersock;
+        int &masterconnected = mss[i].masterconnected;
         maxsock = maxsock == ENET_SOCKET_NULL ? mastersock : max(maxsock, mastersock);
         ENET_SOCKETSET_ADD(readset, mastersock);
-        if(!mss[i].masterconnected) ENET_SOCKETSET_ADD(writeset, mastersock);
+        if(!masterconnected) ENET_SOCKETSET_ADD(writeset, mastersock);
     }
     if(lansock != ENET_SOCKET_NULL)
     {
@@ -566,25 +567,27 @@ void checkserversockets()        // reply all server info requests
 
     loopv(mss) if(mss[i].mastersock != ENET_SOCKET_NULL)
     {
-        if(!mss[i].masterconnected)
+        ENetSocket &mastersock = mss[i].mastersock;
+        int &masterconnected = mss[i].masterconnected, &masterconnecting = mss[i].masterconnecting;
+        if(!masterconnected)
         {
-            if(ENET_SOCKETSET_CHECK(readset, mss[i].mastersock) || ENET_SOCKETSET_CHECK(writeset, mss[i].mastersock))
+            if(ENET_SOCKETSET_CHECK(readset, mastersock) || ENET_SOCKETSET_CHECK(writeset, mastersock))
             {
                 int error = 0;
-                if(enet_socket_get_option(mss[i].mastersock, ENET_SOCKOPT_ERROR, &error) < 0 || error)
+                if(enet_socket_get_option(mastersock, ENET_SOCKOPT_ERROR, &error) < 0 || error)
                 {
                     logoutf("could not connect to master server (%s)", mss[i].mastername);
                     mss[i].disconnectmaster();
                 }
                 else
                 {
-                    mss[i].masterconnecting = 0;
-                    mss[i].masterconnected = totalmillis ? totalmillis : 1;
+                    masterconnecting = 0;
+                    masterconnected = totalmillis ? totalmillis : 1;
                     server::masterconnected(i);
                 }
             }
         }
-        if(mss[i].mastersock != ENET_SOCKET_NULL && ENET_SOCKETSET_CHECK(readset, mss[i].mastersock)) mss[i].flushmasterinput();
+        if(mastersock != ENET_SOCKET_NULL && ENET_SOCKETSET_CHECK(readset, mastersock)) mss[i].flushmasterinput();
     }
 }
 

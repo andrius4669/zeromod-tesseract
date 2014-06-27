@@ -1,5 +1,5 @@
 #ifndef Z_SAVEMAP_H
-#define Z_SAVEMAP_H 1
+#define Z_SAVEMAP_H
 
 bool z_savemap(const char *mname, stream *&file = mapdata)
 {
@@ -37,4 +37,4 @@ void z_servcmd_savemap(int argc, char **argv, int sender)
 }
 SCOMMANDNA(savemap, PRIV_ADMIN, z_servcmd_savemap, 1);
 
-#endif //Z_SAVEMAP_H
+#endif // Z_SAVEMAP_H

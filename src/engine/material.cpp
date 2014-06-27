@@ -72,6 +72,7 @@ struct QuadNode
     }
 };
 
+#ifndef STANDALONE
 static void drawmaterial(const materialsurface &m, float offset)
 {
     if(gle::attribbuf.empty())
@@ -91,6 +92,7 @@ static void drawmaterial(const materialsurface &m, float offset)
 #undef GENFACEVERT
     }
 }
+#endif
 
 const struct material
 {

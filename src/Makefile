@@ -559,6 +559,38 @@ standalone/game/server.o: game/z_ms_gameserver_override.h game/z_geoip.h
 standalone/game/server.o: game/z_msgfilter.h game/extinfo.h game/aiman.h
 standalone/game/server.o: game/z_genericservercommands.h game/z_mutes.h
 standalone/game/server.o: game/z_loadmap.h game/z_savemap.h
+standalone/engine/blend.o: engine/engine.h shared/cube.h shared/tools.h
+standalone/engine/blend.o: shared/geom.h shared/ents.h shared/command.h
+standalone/engine/blend.o: shared/iengine.h shared/igame.h engine/world.h
+standalone/engine/light.o: engine/engine.h shared/cube.h shared/tools.h
+standalone/engine/light.o: shared/geom.h shared/ents.h shared/command.h
+standalone/engine/light.o: shared/iengine.h shared/igame.h engine/world.h
+standalone/engine/normal.o: engine/engine.h shared/cube.h shared/tools.h
+standalone/engine/normal.o: shared/geom.h shared/ents.h shared/command.h
+standalone/engine/normal.o: shared/iengine.h shared/igame.h engine/world.h
+standalone/engine/octa.o: engine/engine.h shared/cube.h shared/tools.h
+standalone/engine/octa.o: shared/geom.h shared/ents.h shared/command.h
+standalone/engine/octa.o: shared/iengine.h shared/igame.h engine/world.h
+standalone/engine/octaedit.o: engine/engine.h shared/cube.h shared/tools.h
+standalone/engine/octaedit.o: shared/geom.h shared/ents.h shared/command.h
+standalone/engine/octaedit.o: shared/iengine.h shared/igame.h engine/world.h
+standalone/engine/octarender.o: engine/engine.h shared/cube.h shared/tools.h
+standalone/engine/octarender.o: shared/geom.h shared/ents.h shared/command.h
+standalone/engine/octarender.o: shared/iengine.h shared/igame.h
+standalone/engine/octarender.o: engine/world.h
+standalone/engine/physics.o: engine/engine.h shared/cube.h shared/tools.h
+standalone/engine/physics.o: shared/geom.h shared/ents.h shared/command.h
+standalone/engine/physics.o: shared/iengine.h shared/igame.h engine/world.h
+standalone/engine/renderlights.o: engine/engine.h shared/cube.h
+standalone/engine/renderlights.o: shared/tools.h shared/geom.h shared/ents.h
+standalone/engine/renderlights.o: shared/command.h shared/iengine.h
+standalone/engine/renderlights.o: shared/igame.h engine/world.h
+standalone/engine/texture.o: engine/engine.h shared/cube.h shared/tools.h
+standalone/engine/texture.o: shared/geom.h shared/ents.h shared/command.h
+standalone/engine/texture.o: shared/iengine.h shared/igame.h engine/world.h
+standalone/engine/world.o: engine/engine.h shared/cube.h shared/tools.h
+standalone/engine/world.o: shared/geom.h shared/ents.h shared/command.h
+standalone/engine/world.o: shared/iengine.h shared/igame.h engine/world.h
 standalone/engine/master.o: shared/cube.h shared/tools.h shared/geom.h
 standalone/engine/master.o: shared/ents.h shared/command.h shared/iengine.h
 standalone/engine/master.o: shared/igame.h

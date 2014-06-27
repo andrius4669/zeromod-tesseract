@@ -166,6 +166,8 @@ bool noedit(bool view, bool msg)
     if(!viewable && msg) conoutf(CON_ERROR, "selection not in view");
     return !viewable;
 }
+#else
+bool noedit(bool view, bool msg) { return false; }
 #endif
 
 void reorient()
@@ -194,7 +196,9 @@ void selextend()
     }
 }
 
+#ifndef STANDALONE
 ICOMMAND(edittoggle, "", (), toggleedit(false));
+#endif
 COMMAND(entcancel, "");
 COMMAND(cubecancel, "");
 COMMAND(cancelsel, "");
@@ -295,10 +299,10 @@ extern bool hoveringonent(int ent, int orient);
 extern void renderentselection(const vec &o, const vec &ray, bool entmoving);
 extern float rayent(const vec &o, const vec &ray, float radius, int mode, int size, int &orient, int &ent);
 
-#ifndef STANDALONE
 VAR(gridlookup, 0, 0, 1);
 VAR(passthroughcube, 0, 1, 1);
 
+#ifndef STANDALONE
 void rendereditcursor()
 {
     int d   = dimension(sel.orient),
@@ -800,7 +804,6 @@ void editredo() { swapundo(redos, undos, "redo"); }
 
 vector<editinfo *> editinfos;
 editinfo *localedit = NULL;
-#endif
 
 template<class B>
 static void packcube(cube &c, B &buf)
@@ -936,7 +939,6 @@ void freeeditinfo(editinfo *&e)
     e = NULL;
 }
 
-#ifndef STANDALONE
 struct prefabheader
 {
     char magic[4];
@@ -1006,7 +1008,6 @@ void saveprefab(char *name)
     conoutf("wrote prefab file %s", filename);
 }
 COMMAND(saveprefab, "s");
-#endif
 
 void pasteblock(block3 &b, selinfo &sel, bool local)
 {
@@ -1018,7 +1019,6 @@ void pasteblock(block3 &b, selinfo &sel, bool local)
     sel.orient = o;
 }
 
-#ifndef STANDALONE
 prefab *loadprefab(const char *name, bool msg = true)
 {
    prefab *b = prefabs.access(name);
@@ -1051,7 +1051,6 @@ void pasteprefab(char *name)
     if(b) pasteblock(*b->copy, sel, true);
 }
 COMMAND(pasteprefab, "s");
-#endif
 
 struct prefabmesh
 {
@@ -1186,6 +1185,7 @@ void genprefabmesh(prefab &p)
 
 extern bvec outlinecolour;
 
+#ifndef STANDALONE
 static void renderprefab(prefab &p, const vec &o, float yaw, float pitch, float roll, float size, const vec &color)
 {
     if(!p.numtris)
@@ -1257,6 +1257,7 @@ void previewprefab(const char *name, const vec &color)
         renderprefab(*p, o, yaw, 0, 0, 1, color);
     }
 }
+#endif
 
 void mpcopy(editinfo *&e, selinfo &sel, bool local)
 {
@@ -2450,6 +2451,7 @@ void editmat(char *name, char *filtername)
 
 COMMAND(editmat, "ss");
 
+#ifndef STANDALONE
 void rendertexturepanel(int w, int h)
 {
     if((texpaneltimer -= curtime)>0 && editmode)
@@ -2553,6 +2555,7 @@ void rendertexturepanel(int w, int h)
         hudshader->set();
     }
 }
+#endif
 
 #define EDITSTAT(name, type, val) \
     ICOMMAND(editstat##name, "", (), \

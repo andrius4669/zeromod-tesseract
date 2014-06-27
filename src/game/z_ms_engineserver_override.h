@@ -189,6 +189,7 @@ void addms()
     mss[currmss].masternum = currmss;
 }
 COMMAND(addms, "");
+ICOMMAND(addmaster, "", (), addms());
 
 void clearmss()
 {
@@ -197,6 +198,7 @@ void clearmss()
     currmss = -1;
 }
 COMMAND(clearmss, "");
+ICOMMAND(clearmasters, "", (), clearmss());
 
 VARFN(updatemaster, allowupdatemaster, 0, 1, 1,
 {

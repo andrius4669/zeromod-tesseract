@@ -214,9 +214,9 @@ static void z_geoip_gencolors(char *cbuf)
     for(size_t i = 0; i < len; i++)
     {
         cbuf[i] = geoip_color_scheme[i];
-        if(cbuf[i] < '0' || cbuf[i] > '7') cbuf[i] = '7';
+        if(cbuf[i] < '0' || cbuf[i] > '9') cbuf[i] = '7';
     }
-    for(size_t i = len; i < 3; i++) cbuf[i] = '7';
+    for(size_t i = len; i < 3; i++) cbuf[i] = len > 0 ? cbuf[len-1] : '7';
 }
 
 static void z_geoip_print(vector<char> &buf, clientinfo *ci, bool admin)

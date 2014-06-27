@@ -89,12 +89,17 @@ extern vec decodenormal(ushort norm);
 extern void reduceslope(ivec &n);
 extern void findtjoints();
 
+// octaedit
+extern void cancelsel();
+
 // blend
 extern void optimizeblendmap();
 extern int calcblendlayer(int x1, int y1, int x2, int y2);
 
 // world
 extern void freeoctaentities(cube &c);
+extern bool pointinsel(const selinfo &sel, const vec &o);
+extern void entcancel();
 
 // physics
 extern bool pointincube(const clipplanes &p, const vec &v);
