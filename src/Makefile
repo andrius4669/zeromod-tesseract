@@ -1,8 +1,6 @@
-#CXXFLAGS= -O3 -fomit-frame-pointer -ffast-math
+CXXFLAGS= -O3 -fomit-frame-pointer -ffast-math
 # for debugging...
 #CXXFLAGS= -O0 -ggdb3 -pipe -fno-inline -fstack-protector -fsanitize=address
-CXX=clang++
-CXXFLAGS= -O0 -pipe
 override CXXFLAGS+= -Wall -fsigned-char -fno-exceptions -fno-rtti
 
 PLATFORM= $(shell uname -s)
@@ -502,9 +500,10 @@ game/server.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/server.o: shared/ents.h shared/command.h shared/glexts.h shared/glemu.h
 game/server.o: shared/iengine.h shared/igame.h game/ai.h game/z_triggers.h
 game/server.o: game/ctf.h game/z_setmaster_override.h game/z_servercommands.h
-game/server.o: game/z_autosendmap.h game/z_sendmap.h game/z_servcmd.h
-game/server.o: game/z_gbans_override.h game/z_ms_gameserver_override.h
-game/server.o: game/z_geoip.h game/z_msgfilter.h game/extinfo.h game/aiman.h
+game/server.o: game/z_nodamage.h game/z_autosendmap.h game/z_sendmap.h
+game/server.o: game/z_servcmd.h game/z_gbans_override.h
+game/server.o: game/z_ms_gameserver_override.h game/z_geoip.h
+game/server.o: game/z_msgfilter.h game/extinfo.h game/aiman.h
 game/server.o: game/z_genericservercommands.h game/z_mutes.h game/z_loadmap.h
 game/server.o: game/z_savemap.h
 game/waypoint.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
@@ -553,44 +552,13 @@ standalone/game/server.o: shared/geom.h shared/ents.h shared/command.h
 standalone/game/server.o: shared/iengine.h shared/igame.h game/ai.h
 standalone/game/server.o: game/z_triggers.h game/ctf.h
 standalone/game/server.o: game/z_setmaster_override.h game/z_servercommands.h
-standalone/game/server.o: game/z_autosendmap.h game/z_sendmap.h
-standalone/game/server.o: game/z_servcmd.h game/z_gbans_override.h
+standalone/game/server.o: game/z_nodamage.h game/z_autosendmap.h
+standalone/game/server.o: game/z_sendmap.h game/z_servcmd.h
+standalone/game/server.o: game/z_gbans_override.h
 standalone/game/server.o: game/z_ms_gameserver_override.h game/z_geoip.h
 standalone/game/server.o: game/z_msgfilter.h game/extinfo.h game/aiman.h
 standalone/game/server.o: game/z_genericservercommands.h game/z_mutes.h
 standalone/game/server.o: game/z_loadmap.h game/z_savemap.h
-standalone/engine/blend.o: engine/engine.h shared/cube.h shared/tools.h
-standalone/engine/blend.o: shared/geom.h shared/ents.h shared/command.h
-standalone/engine/blend.o: shared/iengine.h shared/igame.h engine/world.h
-standalone/engine/light.o: engine/engine.h shared/cube.h shared/tools.h
-standalone/engine/light.o: shared/geom.h shared/ents.h shared/command.h
-standalone/engine/light.o: shared/iengine.h shared/igame.h engine/world.h
-standalone/engine/normal.o: engine/engine.h shared/cube.h shared/tools.h
-standalone/engine/normal.o: shared/geom.h shared/ents.h shared/command.h
-standalone/engine/normal.o: shared/iengine.h shared/igame.h engine/world.h
-standalone/engine/octa.o: engine/engine.h shared/cube.h shared/tools.h
-standalone/engine/octa.o: shared/geom.h shared/ents.h shared/command.h
-standalone/engine/octa.o: shared/iengine.h shared/igame.h engine/world.h
-standalone/engine/octaedit.o: engine/engine.h shared/cube.h shared/tools.h
-standalone/engine/octaedit.o: shared/geom.h shared/ents.h shared/command.h
-standalone/engine/octaedit.o: shared/iengine.h shared/igame.h engine/world.h
-standalone/engine/octarender.o: engine/engine.h shared/cube.h shared/tools.h
-standalone/engine/octarender.o: shared/geom.h shared/ents.h shared/command.h
-standalone/engine/octarender.o: shared/iengine.h shared/igame.h
-standalone/engine/octarender.o: engine/world.h
-standalone/engine/physics.o: engine/engine.h shared/cube.h shared/tools.h
-standalone/engine/physics.o: shared/geom.h shared/ents.h shared/command.h
-standalone/engine/physics.o: shared/iengine.h shared/igame.h engine/world.h
-standalone/engine/renderlights.o: engine/engine.h shared/cube.h
-standalone/engine/renderlights.o: shared/tools.h shared/geom.h shared/ents.h
-standalone/engine/renderlights.o: shared/command.h shared/iengine.h
-standalone/engine/renderlights.o: shared/igame.h engine/world.h
-standalone/engine/texture.o: engine/engine.h shared/cube.h shared/tools.h
-standalone/engine/texture.o: shared/geom.h shared/ents.h shared/command.h
-standalone/engine/texture.o: shared/iengine.h shared/igame.h engine/world.h
-standalone/engine/world.o: engine/engine.h shared/cube.h shared/tools.h
-standalone/engine/world.o: shared/geom.h shared/ents.h shared/command.h
-standalone/engine/world.o: shared/iengine.h shared/igame.h engine/world.h
 standalone/engine/master.o: shared/cube.h shared/tools.h shared/geom.h
 standalone/engine/master.o: shared/ents.h shared/command.h shared/iengine.h
 standalone/engine/master.o: shared/igame.h

@@ -2123,14 +2123,16 @@ namespace server
 
     void startintermission() { gamelimit = min(gamelimit, gamemillis); checkintermission(); }
 
+    #include "z_nodamage.h"
+
     void dodamage(clientinfo *target, clientinfo *actor, int damage, int atk, const vec &hitpush = vec(0, 0, 0))
     {
         servstate &ts = target->state;
-        ts.dodamage(damage);
+        if(!m_edit || !z_nodamage) ts.dodamage(damage);
         if(target!=actor && !isteam(target->team, actor->team)) actor->state.damage += damage;
         sendf(-1, 1, "ri5", N_DAMAGE, target->clientnum, actor->clientnum, damage, ts.health);
         if(target==actor) target->setpushed();
-        else if(!hitpush.iszero())
+        else if(!hitpush.iszero() && (!m_edit || z_nodamage < 2))
         {
             ivec v = vec(hitpush).rescale(DNF);
             sendf(ts.health<=0 ? -1 : target->ownernum, 1, "ri7", N_HITPUSH, target->clientnum, atk, damage, v.x, v.y, v.z);
