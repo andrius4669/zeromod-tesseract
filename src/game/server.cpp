@@ -201,6 +201,8 @@ namespace server
 
     extern int gamemillis, nextexceeded;
 
+    #include "z_geoipstate.h"
+
     struct clientinfo
     {
         int clientnum, ownernum, connectmillis, sessionid, overflow;
@@ -229,13 +231,14 @@ namespace server
         void *authchallenge;
         int authkickvictim;
         char *authkickreason;
-        char *geoip_country, *geoip_region, *geoip_city, *geoip_continent, *disc_reason;
+        char *disc_reason;
         bool chatmute, specmute, editmute, spy, invpriv;
         int lastchat, lastedit;
+        geoipstate geoip;
 
         clientinfo() : getdemo(NULL), getmap(NULL), clipboard(NULL), authchallenge(NULL), authkickreason(NULL),
-            geoip_country(NULL), geoip_region(NULL), geoip_city(NULL), geoip_continent(NULL), disc_reason(NULL) { reset(); }
-        ~clientinfo() { events.deletecontents(); cleanclipboard(); cleanauth(); cleangeoip(); DELETEP(disc_reason); }
+            disc_reason(NULL) { reset(); }
+        ~clientinfo() { events.deletecontents(); cleanclipboard(); cleanauth(); DELETEP(disc_reason); }
 
         void addevent(gameevent *e)
         {
@@ -327,14 +330,6 @@ namespace server
             if(authchallenge) { freechallenge(authchallenge); authchallenge = NULL; }
             if(full) cleanauthkick();
         }
-        
-        void cleangeoip()
-        {
-            DELETEA(geoip_continent);
-            DELETEA(geoip_country);
-            DELETEA(geoip_region);
-            DELETEA(geoip_city);
-        }
 
         void reset()
         {
@@ -352,7 +347,7 @@ namespace server
             needclipboard = 0;
             cleanclipboard();
             cleanauth();
-            cleangeoip();
+            geoip.cleanup();
             DELETEP(disc_reason);
             chatmute = specmute = editmute = spy = invpriv= false;
             lastchat = lastedit = 0;

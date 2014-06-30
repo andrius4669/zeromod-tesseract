@@ -142,21 +142,4 @@ SCOMMANDNA(pm, PRIV_NONE, z_servcmd_pm, 2);
 #include "z_loadmap.h"
 #include "z_savemap.h"
 
-void z_servcmd_test(int argc, char **argv, int sender)
-{
-    vector<char> buf;
-    const char *s = "testcmd";
-    buf.put(s, strlen(s));
-    s = tempformatstring(" [%d]:", argc);
-    buf.put(s, strlen(s));
-    loopi(argc)
-    {
-        s = tempformatstring(" [%s]", argv[i]);
-        buf.put(s, strlen(s));
-    }
-    buf.add('\0');
-    sendf(sender, 1, "ris", N_SERVMSG, buf.getbuf());
-}
-SCOMMANDNA(test, 0, z_servcmd_test, 0);
-
 #endif //Z_GENERICSERVERCOMMANDS_H

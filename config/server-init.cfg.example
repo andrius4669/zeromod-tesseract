@@ -85,21 +85,53 @@ maprotation "?ctf" $ctfmaps
 teamkillkickreset
 teamkillkick "*" 7 30
 
-// geoip_enable 0				// if 0, disables every geoip feature
-// geoip_country_enable 1			// should we try using country database?
-// geoip_country_database "GeoIP.dat"		// path to country database
-// geoip_city_enable 0				// should we try using city database? note: we can read countries from here too
-// geoip_city_database "GeoLiteCity.dat"	// path to city database
-//	0 - don't show, 1 - show for everyone, 2 - show for admins only
-// geoip_show_ip 2
-// geoip_show_city 0
-// geoip_show_region 0
-// geoip_show_country 1
-// geoip_show_continent 0
-// geoip_skip_duplicates 1			// does not display duplicate entries
-// geoip_color_scheme "777"			// color scheme made of 3 numbers describing first, second and thrid colors used in geoip messages
+// if 0, disables every geoip feature
+// geoip_enable 0
 
-// servcmd_chars ""				// defines which characters makes server interept text message as command
+// should we try using country database?
+// geoip_country_enable 1
+
+// path to country database
+// geoip_country_database "GeoIP.dat"
+
+// should we try using city database? note: we can read countries from here too
+// geoip_city_enable 0
+
+// path to city database
+// geoip_city_database "GeoLiteCity.dat"
+
+// vars controlling which parts of geoip info are shown to clients
+// 0 - don't show, 1 - show for everyone, 2 - show for admins only
+// client ip
+// geoip_show_ip 2
+// string describing network client is in (ex: localhost, local client, Local Area Network, Anonymous Proxy)
+// geoip_show_network 1
+// city client is in (retrieved from city database)
+// geoip_show_city 0
+// region client is in (retrieved from city database)
+// geoip_show_region 0
+// country client is in (could be retrieved from both databases)
+// geoip_show_country 1
+// continent client is in (ex: Europe, Asia) (could be retrieved from both databases)
+// geoip_show_continent 0
+
+// does not display duplicate entries (0 - disabled, 1 - enabled for near components, 2 - enabled for all components)
+// geoip_skip_duplicates 1
+
+// which database we shall prefer for country (and continent)
+// 0 - first try country db
+// 1 - first try city db
+// 2 - first try country, and if data from city db mismatches, drop all result from city db
+// geoip_country_use_db 0
+
+// fix country names like "Korea, Republic of" to "Republic of Korea"
+// geoip_fix_country 1
+
+// color scheme made of 3 numbers describing first, second and thrid colors used in geoip messages
+// geoip_color_scheme "777"
+
+// defines which characters makes server interept text message as command
+// servcmd_chars ""
 servcmd_chars "#!\"
 
 // password that allows you to gain master by "setmaster password_here"
