@@ -64,6 +64,12 @@ static void z_initservcommands()
     }
 }
 
+void z_servcmd_set_privilege(const char *cmd, int privilege)
+{
+    if(!z_initedservcommands) z_initservcommands();
+    loopv(z_servcommands) if(!strcmp(z_servcommands[i].name, cmd)) z_servcommands[i].privilege = privilege;
+}
+
 #define SCOMMANDZ(_name, _priv, _funcname, _args, _hidden) UNUSED static bool __s_dummy__##_name = addservcmd(z_servcmdinfo(#_name, _funcname, _priv, _args, _hidden))
 #define SCOMMAND(_name, _priv) SCOMMANDZ(_name, _priv, _name, 0, false)
 #define SCOMMANDH(_name, _priv) SCOMMANDZ(_name, _priv, _name, 0, true)

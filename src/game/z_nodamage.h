@@ -10,17 +10,48 @@ static void z_nodamage_trigger(int type)
 Z_TRIGGER(z_nodamage_trigger, Z_TRIGGER_STARTUP);
 Z_TRIGGER(z_nodamage_trigger, Z_TRIGGER_NOCLIENTS);
 
+VARF(servernodamage_global, 0, 1, 1,
+{
+    z_nodamage = servernodamage;
+    if(servernodamage_global) { loopv(clients) clients[i]->nodamage = z_nodamage; }
+    z_servcmd_set_privilege("nodamage", servernodamage_global ? PRIV_MASTER : PRIV_NONE);
+});
+
 static void z_servcmd_nodamage(int argc, char **argv, int sender)
 {
     int val = argc >= 2 && argv[1] && *argv[1] ? atoi(argv[1]) : -1;
-    if(val < 0) sendf(sender, 1, "ris", N_SERVMSG,
-        tempformatstring("nodamage is %s", z_nodamage <= 0 ? "disabled" : z_nodamage > 1 ? "enabled (without hitpush)" : "enabled"));
+    clientinfo *senderci = getinfo(sender), *ci;
+
+    if(servernodamage_global)
+    {
+        if(senderci->privilege < PRIV_MASTER && !senderci->local)
+        {
+            sendf(sender, 1, "ris", N_SERVMSG, "you need to claim master to execute this server command");
+            return;
+        }
+        ci = NULL;
+    }
     else
     {
-        z_nodamage = clamp(val, 0, 2);
-        sendservmsgf("nodamage %s", z_nodamage <= 0 ? "disabled" : z_nodamage > 1 ? "enabled (without hitpush)" : "enabled");
+        ci = senderci;
+    }
+
+    int &nodamage = ci ? ci->nodamage : z_nodamage;
+
+    if(val < 0) sendf(sender, 1, "ris", N_SERVMSG,
+        tempformatstring("nodamage is %s", nodamage <= 0 ? "disabled" : nodamage > 1 ? "enabled (without hitpush)" : "enabled"));
+    else
+    {
+        nodamage = clamp(val, 0, 2);
+        sendf(ci ? sender : -1, 1, "ris", N_SERVMSG,
+              tempformatstring("nodamage %s", nodamage <= 0 ? "disabled" : nodamage > 1 ? "enabled (without hitpush)" : "enabled"));
+    }
+
+    if(servernodamage_global)
+    {
+        loopv(clients) clients[i]->nodamage = z_nodamage;
     }
 }
-SCOMMANDNA(nodamage, PRIV_MASTER, z_servcmd_nodamage, 1);
+SCOMMANDNA(nodamage, PRIV_NONE, z_servcmd_nodamage, 1);
 
 #endif // Z_NODAMAGE_H

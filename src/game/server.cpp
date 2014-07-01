@@ -200,6 +200,7 @@ namespace server
     };
 
     extern int gamemillis, nextexceeded;
+    extern int gamemode;
 
     #include "z_geoipstate.h"
 
@@ -235,6 +236,7 @@ namespace server
         bool chatmute, specmute, editmute, spy, invpriv;
         int lastchat, lastedit;
         geoipstate geoip;
+        int nodamage;
 
         clientinfo() : getdemo(NULL), getmap(NULL), clipboard(NULL), authchallenge(NULL), authkickreason(NULL),
             disc_reason(NULL) { reset(); }
@@ -349,8 +351,9 @@ namespace server
             cleanauth();
             geoip.cleanup();
             DELETEP(disc_reason);
-            chatmute = specmute = editmute = spy = invpriv= false;
+            chatmute = specmute = editmute = spy = invpriv = false;
             lastchat = lastedit = 0;
+            nodamage = 0;
             mapchange();
         }
 
@@ -376,6 +379,13 @@ namespace server
         }
 
         void setdisconnectreason(const char *reason) { DELETEP(disc_reason); disc_reason = newstring(reason); }
+
+        int hasnodamage(clientinfo *ci) const  // 0 - can be damaged, 1 - no damage, 2 - no damage and hitpush
+        {
+            // NULL is used for suicides
+            if(!ci || !m_edit) return 0;
+            return max(nodamage, ci->nodamage);
+        }
     };
 
     struct ban
@@ -2123,11 +2133,11 @@ namespace server
     void dodamage(clientinfo *target, clientinfo *actor, int damage, int atk, const vec &hitpush = vec(0, 0, 0))
     {
         servstate &ts = target->state;
-        if(!m_edit || !z_nodamage) ts.dodamage(damage);
+        if(!target->hasnodamage(actor)) ts.dodamage(damage);
         if(target!=actor && !isteam(target->team, actor->team)) actor->state.damage += damage;
         sendf(-1, 1, "ri5", N_DAMAGE, target->clientnum, actor->clientnum, damage, ts.health);
         if(target==actor) target->setpushed();
-        else if(!hitpush.iszero() && (!m_edit || z_nodamage < 2))
+        else if(!hitpush.iszero() && target->hasnodamage(actor) < 2)
         {
             ivec v = vec(hitpush).rescale(DNF);
             sendf(ts.health<=0 ? -1 : target->ownernum, 1, "ri7", N_HITPUSH, target->clientnum, atk, damage, v.x, v.y, v.z);
@@ -2182,7 +2192,7 @@ namespace server
 
     void suicideevent::process(clientinfo *ci)
     {
-        suicide(ci);
+        if(!ci->hasnodamage(NULL)) suicide(ci);
     }
 
     void explodeevent::process(clientinfo *ci)
@@ -2855,6 +2865,8 @@ namespace server
         if(m_edit && z_connectsendmap == 1) z_sendmap(ci, NULL);
         extern bool z_autoeditmute;
         if(z_autoeditmute) ci->editmute = true;
+        extern int z_nodamage;
+        ci->nodamage = z_nodamage;
     }
 
     #include "z_msgfilter.h"
