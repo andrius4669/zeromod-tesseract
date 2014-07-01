@@ -156,6 +156,8 @@ SERVER_OBJS= \
 
 ifneq (,$(OCTASERV))
 SERVER_OBJS+= \
+	standalone/engine/shader.cpp \
+	standalone/engine/material.o \
 	standalone/engine/blend.o \
 	standalone/engine/light.o \
 	standalone/engine/normal.o \

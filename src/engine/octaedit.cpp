@@ -280,6 +280,7 @@ void updateselection()
     sel.s.z = abs(lastcur.z-cur.z)/sel.grid+1;
 }
 
+#ifndef STANDALONE
 bool editmoveplane(const vec &o, const vec &ray, int d, float off, vec &handle, vec &dest, bool first)
 {
     plane pl(d, off);
@@ -292,6 +293,7 @@ bool editmoveplane(const vec &o, const vec &ray, int d, float off, vec &handle, 
     dest.sub(handle);
     return true;
 }
+#endif
 
 namespace hmap { inline bool isheightmap(int orient, int d, bool empty, cube *c); }
 extern void entdrag(const vec &ray);
@@ -517,6 +519,7 @@ void readychanges(const ivec &bbmin, const ivec &bbmax, cube *c, const ivec &cor
         ivec o(i, cor, size);
         if(c[i].ext)
         {
+#ifndef STANDALONE
             if(c[i].ext->va)             // removes va s so that octarender will recreate
             {
                 int hasmerges = c[i].ext->va->hasmerges;
@@ -524,6 +527,7 @@ void readychanges(const ivec &bbmin, const ivec &bbmax, cube *c, const ivec &cor
                 c[i].ext->va = NULL;
                 if(hasmerges) invalidatemerges(c[i], o, size, true);
             }
+#endif
             freeoctaentities(c[i]);
             c[i].ext->tjoints = -1;
         }
@@ -546,16 +550,20 @@ void commitchanges(bool force)
     if(!force && !haschanged) return;
     haschanged = false;
 
+#ifndef STANDALONE
     extern vector<vtxarray *> valist;
     int oldlen = valist.length();
     resetclipplanes();
+#endif
     entitiesinoctanodes();
+#ifndef STANDALONE
     inbetweenframes = false;
     octarender();
     inbetweenframes = true;
     setupmaterials(oldlen);
     clearshadowcache();
     updatevabbs();
+#endif
 }
 
 void changed(const ivec &bbmin, const ivec &bbmax, bool commit)
@@ -641,6 +649,7 @@ void pasteundo(undoblock *u)
     }
 }
 
+#ifndef STANDALONE
 static inline int undosize(undoblock *u)
 {
     if(u->numents) return u->numents*sizeof(undoent);
@@ -694,7 +703,9 @@ struct undolist
 };
 
 undolist undos, redos;
+#endif
 VARP(undomegs, 0, 5, 100);                              // bounded by n megs
+#ifndef STANDALONE
 int totalundos = 0;
 
 void pruneundos(int maxremain)                          // bound memory
@@ -717,6 +728,7 @@ void pruneundos(int maxremain)                          // bound memory
 void clearundos() { pruneundos(0); }
 
 COMMAND(clearundos, "");
+#endif
 
 undoblock *newundocube(selinfo &s)
 {
@@ -733,6 +745,7 @@ undoblock *newundocube(selinfo &s)
     return u;
 }
 
+#ifndef STANDALONE
 void addundo(undoblock *u)
 {
     u->size = undosize(u);
@@ -798,6 +811,7 @@ void swapundo(undolist &a, undolist &b, const char *s)
 
 void editundo() { swapundo(undos, redos, "undo"); }
 void editredo() { swapundo(redos, undos, "redo"); }
+#endif
 
 // guard against subdivision
 #define protectsel(f) { undoblock *_u = newundocube(sel); f; if(_u) { pasteundo(_u); freeundo(_u); } }
@@ -939,6 +953,7 @@ void freeeditinfo(editinfo *&e)
     e = NULL;
 }
 
+#ifndef STANDALONE
 struct prefabheader
 {
     char magic[4];
@@ -1008,6 +1023,7 @@ void saveprefab(char *name)
     conoutf("wrote prefab file %s", filename);
 }
 COMMAND(saveprefab, "s");
+#endif
 
 void pasteblock(block3 &b, selinfo &sel, bool local)
 {
@@ -1019,6 +1035,7 @@ void pasteblock(block3 &b, selinfo &sel, bool local)
     sel.orient = o;
 }
 
+#ifndef STANDALONE
 prefab *loadprefab(const char *name, bool msg = true)
 {
    prefab *b = prefabs.access(name);
@@ -1185,7 +1202,6 @@ void genprefabmesh(prefab &p)
 
 extern bvec outlinecolour;
 
-#ifndef STANDALONE
 static void renderprefab(prefab &p, const vec &o, float yaw, float pitch, float roll, float size, const vec &color)
 {
     if(!p.numtris)
@@ -1276,6 +1292,7 @@ void mppaste(editinfo *&e, selinfo &sel, bool local)
     if(e->copy) pasteblock(*e->copy, sel, local);
 }
 
+#ifndef STANDALONE
 void copy()
 {
     if(noedit(true)) return;
@@ -1301,6 +1318,7 @@ COMMAND(pastehilite, "");
 COMMAND(paste, "");
 COMMANDN(undo, editundo, "");
 COMMANDN(redo, editredo, "");
+#endif
 
 static VSlot *editingvslot = NULL;
 
@@ -1312,12 +1330,14 @@ void compacteditvslots()
         editinfo *e = editinfos[i];
         compactvslots(e->copy->c(), e->copy->size());
     }
+#ifndef STANDALONE
     for(undoblock *u = undos.first; u; u = u->next)
         if(!u->numents)
             compactvslots(u->block()->c(), u->block()->size());
     for(undoblock *u = redos.first; u; u = u->next)
         if(!u->numents)
             compactvslots(u->block()->c(), u->block()->size());
+#endif
 }
 
 ///////////// height maps ////////////////
@@ -1808,11 +1828,13 @@ void pushsel(int *dir)
     int d = dimension(orient);
     int s = dimcoord(orient) ? -*dir : *dir;
     sel.o[d] += s*sel.grid;
+#ifndef STANDALONE
     if(selectionsurf==1)
     {
         player->o[d] += s*sel.grid;
         player->resetinterp();
     }
+#endif
 }
 
 void mpdelcube(selinfo &sel, bool local)
@@ -2555,7 +2577,6 @@ void rendertexturepanel(int w, int h)
         hudshader->set();
     }
 }
-#endif
 
 #define EDITSTAT(name, type, val) \
     ICOMMAND(editstat##name, "", (), \
@@ -2584,4 +2605,5 @@ EDITSTAT(glde, int, glde);
 EDITSTAT(geombatch, int, gbatches);
 EDITSTAT(oq, int, getnumqueries());
 EDITSTAT(pvs, int, getnumviewcells());
+#endif
 

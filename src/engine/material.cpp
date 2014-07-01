@@ -1,5 +1,6 @@
 #include "engine.h"
 
+#ifndef STANDALONE
 struct QuadNode
 {
     int x, y, size;
@@ -72,7 +73,6 @@ struct QuadNode
     }
 };
 
-#ifndef STANDALONE
 static void drawmaterial(const materialsurface &m, float offset)
 {
     if(gle::attribbuf.empty())
@@ -207,6 +207,7 @@ static inline void addmatbb(ivec &matmin, ivec &matmax, const materialsurface &m
     matmax.max(mmax);
 }
 
+#ifndef STANDALONE
 void calcmatbb(vtxarray *va, const ivec &co, int size, vector<materialsurface> &matsurfs)
 {
     va->lavamax = va->watermax = va->glassmax = co;
@@ -235,6 +236,7 @@ void calcmatbb(vtxarray *va, const ivec &co, int size, vector<materialsurface> &
         }
     }
 }
+#endif
 
 static inline bool mergematcmp(const materialsurface &x, const materialsurface &y)
 {
@@ -310,6 +312,7 @@ static inline bool optmatcmp(const materialsurface &x, const materialsurface &y)
 
 VARF(optmats, 0, 1, 1, allchanged());
 
+#ifndef STANDALONE
 int optimizematsurfs(materialsurface *matbuf, int matsurfs)
 {
     quicksort(matbuf, matsurfs, optmatcmp);
@@ -673,6 +676,7 @@ void rendermaterialmask()
     gle::disable();
     glEnable(GL_CULL_FACE);
 }
+#endif
 
 extern const vec matnormals[6] =
 {
@@ -700,6 +704,7 @@ GETMATIDXVAR(glass, spec, int)
 
 VARFP(glassenv, 0, 1, 1, preloadglassshaders());
 
+#ifndef STANDALONE
 void renderglass()
 {
     loopk(4)
@@ -829,4 +834,4 @@ void renderminimapmaterials()
     gle::disable();
     glEnable(GL_CULL_FACE);
 }
-
+#endif

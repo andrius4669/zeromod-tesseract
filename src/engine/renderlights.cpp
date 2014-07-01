@@ -1463,7 +1463,6 @@ void cleanupradiancehints()
 
     clearrhshaders();
 }
-#endif
 
 VARF(rhrect, 0, 0, 1, cleanupradiancehints());
 VARF(rhsplits, 1, 2, RH_MAXSPLITS, { cleardeferredlightshaders(); cleanupradiancehints(); });
@@ -1475,9 +1474,11 @@ FVARF(rsmpradiustweak, 1e-3f, 1, 1e3f, clearradiancehintscache());
 FVARF(rhpradiustweak, 1e-3f, 1, 1e3f, clearradiancehintscache());
 FVARF(rsmdepthrange, 0, 1024, 1e6f, clearradiancehintscache());
 FVARF(rsmdepthmargin, 0, 0.1f, 1e3f, clearradiancehintscache());
+#endif
 VARFP(rhprec, 0, 0, 1, cleanupradiancehints());
 VARFP(rsmprec, 0, 0, 3, cleanupradiancehints());
 VARFP(rsmdepthprec, 0, 0, 2, cleanupradiancehints());
+#ifndef STANDALONE
 FVAR(rhnudge, 0, 0.5f, 4);
 FVARF(rhworldbias, 0, 0.5f, 10, clearradiancehintscache());
 FVARF(rhsplitweight, 0.20f, 0.6f, 0.95f, clearradiancehintscache());
@@ -1487,6 +1488,7 @@ VAR(rhclipgrid, 0, 1, 1);
 VARF(rhcache, 0, 1, 1, cleanupradiancehints());
 VARF(rhforce, 0, 0, 1, cleanupradiancehints());
 VAR(rsmcull, 0, 1, 1);
+#endif
 VARFP(rhtaps, 0, 20, 32, cleanupradiancehints());
 VAR(rhdyntex, 0, 0, 1);
 VAR(rhdynmm, 0, 0, 1);

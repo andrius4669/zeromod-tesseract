@@ -2,6 +2,7 @@
 
 #include "engine.h"
 
+#ifndef STANDALONE
 Shader *Shader::lastshader = NULL;
 
 Shader *nullshader = NULL, *hudshader = NULL, *hudtextshader = NULL, *hudnotextureshader = NULL, *nocolorshader = NULL, *foggedshader = NULL, *foggednotextureshader = NULL, *ldrshader = NULL, *ldrnotextureshader = NULL, *stdworldshader = NULL;
@@ -1274,6 +1275,7 @@ void isshaderdefined(char *name)
 }
 
 COMMAND(isshaderdefined, "s");
+#endif
 
 static hashset<const char *> shaderparamnames(256);
 
@@ -1284,6 +1286,7 @@ const char *getshaderparamname(const char *name)
     return shaderparamnames.add(newstring(name));
 }
 
+#ifndef STANDALONE
 void addslotparam(const char *name, float x, float y, float z, float w)
 {
     if(name) name = getshaderparamname(name);
@@ -1588,4 +1591,4 @@ void setblurshader(int pass, int size, int radius, float *weights, float *offset
     loopk(8) scaledoffsets[k] = offsets[k]/size;
     LOCALPARAMV(offsets, scaledoffsets, 8);
 }
-
+#endif

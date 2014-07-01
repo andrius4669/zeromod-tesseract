@@ -915,6 +915,7 @@ void addcubeverts(VSlot &vslot, int orient, int size, vec *pos, int convex, usho
         }
     }
 }
+#endif
 
 struct edgegroup
 {
@@ -1066,6 +1067,7 @@ void gencubeedges(cube *c = worldroot, const ivec &co = ivec(0, 0, 0), int size 
     --neighbourdepth;
 }
 
+#ifndef STANDALONE
 void gencubeverts(cube &c, const ivec &co, int size, int csi)
 {
     if(!(c.visible&0xC0)) return;

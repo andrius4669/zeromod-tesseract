@@ -641,6 +641,7 @@ bool plcollide(physent *d, const vec &dir)    // collide with player
     }
     return false;
 }
+#endif
 
 void rotatebb(vec &center, vec &radius, int yaw, int pitch, int roll)
 {
@@ -653,6 +654,7 @@ void rotatebb(vec &center, vec &radius, int yaw, int pitch, int roll)
     radius = orient.abstransform(radius);
 }
 
+#ifndef STANDALONE
 template<class E, class M>
 static inline bool mmcollide(physent *d, const vec &dir, const extentity &e, const vec &center, const vec &radius, int yaw, int pitch, int roll)
 {

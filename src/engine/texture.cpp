@@ -1677,11 +1677,15 @@ static void clampvslotoffset(VSlot &dst, Slot *slot = NULL)
     if(!slot) slot = dst.slot;
     if(slot && slot->sts.inrange(0))
     {
+#ifndef STANDALONE
         if(!slot->loaded) slot->load();
         int xs = slot->sts[0].t->xs, ys = slot->sts[0].t->ys;
         if((dst.rotation&5)==1) swap(xs, ys);
         dst.offset.x %= xs; if(dst.offset.x < 0) dst.offset.x += xs;
         dst.offset.y %= ys; if(dst.offset.y < 0) dst.offset.y += ys;
+#else
+        dst.offset.max(0);
+#endif
     }
     else dst.offset.max(0);
 }
@@ -2238,43 +2242,51 @@ void Slot::load()
 MatSlot &lookupmaterialslot(int index, bool load)
 {
     MatSlot &s = materialslots[index];
+#ifndef STANDALONE
     if(load && !s.linked)
     {
         if(!s.loaded) s.load();
         linkvslotshader(s);
         s.linked = true;
     }
+#endif
     return s;
 }
 
 Slot &lookupslot(int index, bool load)
 {
     Slot &s = slots.inrange(index) ? *slots[index] : (slots.inrange(DEFAULT_GEOM) ? *slots[DEFAULT_GEOM] : dummyslot);
+#ifndef STANDALONE
     if(!s.loaded && load) s.load();
+#endif
     return s;
 }
 
 VSlot &lookupvslot(int index, bool load)
 {
     VSlot &s = vslots.inrange(index) && vslots[index]->slot ? *vslots[index] : (slots.inrange(DEFAULT_GEOM) && slots[DEFAULT_GEOM]->variants ? *slots[DEFAULT_GEOM]->variants : dummyvslot);
+#ifndef STANDALONE
     if(load && !s.linked)
     {
         if(!s.slot->loaded) s.slot->load();
         linkvslotshader(s);
         s.linked = true;
     }
+#endif
     return s;
 }
 
 DecalSlot &lookupdecalslot(int index, bool load)
 {
     DecalSlot &s = decalslots.inrange(index) ? *decalslots[index] : dummydecalslot;
+#ifndef STANDALONE
     if(load && !s.linked)
     {
         if(!s.loaded) s.load();
         linkvslotshader(s);
         s.linked = true;
     }
+#endif
     return s;
 }
 

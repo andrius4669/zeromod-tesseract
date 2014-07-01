@@ -6,6 +6,8 @@ typedef uint GLuint;
 #include "light.h"
 #include "texture.h"
 
+extern int identflags;
+
 extern int worldscale, worldsize;
 extern int mapversion;
 extern char *maptitle;
@@ -22,6 +24,7 @@ static inline void cleardeferredlightshaders() {}
 static inline void clearshadowcache() {}
 static inline void initlights() {}
 static inline void clearlightcache(int id = -1) {}
+static inline void cleanupao() {}
 
 static inline void clearradiancehintscache() {}
 static inline void clearblendtextures() {}
@@ -33,6 +36,34 @@ static inline void allchanged(bool load = false) {}
 
 static inline void destroyva(void *va, bool reparent = true) {}
 
+static inline void preloadglassshaders(bool force = false) {}
+
+static inline void makeundo() {}
+static inline void makeundoex(selinfo &s) {}
+
+static inline void cleanupradiancehints() {}
+
+static inline void resetslotshader() {}
+static inline void setslotshader(Slot &s) {}
+
+static int nompedit = 0;
+
+enum
+{
+    NOT_INITING = 0,
+    INIT_GAME,
+    INIT_LOAD,
+    INIT_RESET
+};
+
+enum
+{
+    CHANGE_GFX     = 1<<0,
+    CHANGE_SOUND   = 1<<1,
+    CHANGE_SHADERS = 1<<2
+};
+
+static inline bool initwarning(const char *desc, int level = INIT_RESET, int type = CHANGE_GFX) { return false; }
 
 // octa
 extern cube *newcubes(uint face = F_EMPTY, int mat = MAT_AIR);
@@ -82,6 +113,11 @@ extern int mergefaces(int orient, facebounds *m, int sz);
 extern void mincubeface(const cube &cu, int orient, const ivec &o, int size, const facebounds &orig, facebounds &cf, ushort nmat = MAT_AIR, ushort matmask = MATF_VOLUME);
 extern void remip();
 
+static inline cubeext &ext(cube &c)
+{
+    return *(c.ext ? c.ext : newcubeext(c));
+}
+
 // octarender
 extern vector<tjoint> tjoints;
 extern ushort encodenormal(const vec &n);
@@ -91,6 +127,9 @@ extern void findtjoints();
 
 // octaedit
 extern void cancelsel();
+extern void commitchanges(bool force = false);
+extern void changed(const ivec &bbmin, const ivec &bbmax, bool commit = true);
+extern void changed(const block3 &sel, bool commit = true);
 
 // blend
 extern void optimizeblendmap();
@@ -100,9 +139,35 @@ extern int calcblendlayer(int x1, int y1, int x2, int y2);
 extern void freeoctaentities(cube &c);
 extern bool pointinsel(const selinfo &sel, const vec &o);
 extern void entcancel();
+extern void entitiesinoctanodes();
+extern void pasteundoents(undoblock *u);
 
 // physics
 extern bool pointincube(const clipplanes &p, const vec &v);
+extern void rotatebb(vec &center, vec &radius, int yaw, int pitch, int roll = 0);
+
+// texture
+extern void compacteditvslots();
+extern void compactmruvslots();
+extern void compactvslots(cube *c, int n = 8);
+extern void compactvslot(int &index);
+extern int compactvslots(bool cull = false);
+
+// materials
+extern int findmaterial(const char *name);
+extern const char *findmaterialname(int mat);
+extern const char *getmaterialdesc(int mat, const char *prefix = "");
+#define GETMATIDXVAR(name, var, type) \
+    type get##name##var(int mat) \
+    { \
+        switch(mat&MATF_INDEX) \
+        { \
+            default: case 0: return name##var; \
+            case 1: return name##2##var; \
+            case 2: return name##3##var; \
+            case 3: return name##4##var; \
+        } \
+    }
 
 #define CHECK_CALCLIGHT_PROGRESS(exit, show_calclight_progress)
 

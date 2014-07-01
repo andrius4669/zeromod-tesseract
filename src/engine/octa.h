@@ -82,7 +82,9 @@ struct occludequery
     int fragments;
 };
 
+#ifndef STANDALONE
 struct vtxarray;
+#endif
 
 struct octaentities
 {
@@ -179,7 +181,7 @@ struct cubeext
 #ifndef STANDALONE
     vtxarray *va;            // vertex array for children, or NULL
 #else
-    static void *va;
+    void *va;
 #endif
     octaentities *ents;      // map entities inside cube
     surfaceinfo surfaces[6]; // render info for each surface
