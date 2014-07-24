@@ -1,6 +1,8 @@
 #ifndef Z_GEOIP_H
 #define Z_GEOIP_H
 
+#include "z_geoipstate.h"
+
 #ifdef USE_GEOIP
 
 #include "GeoIP.h"
@@ -52,6 +54,7 @@ VARF(geoip_country_enable, 0, 1, 1, z_reset_geoip_country());
 SVARF(geoip_country_database, "GeoIP.dat", z_reset_geoip_country());
 VARF(geoip_city_enable, 0, 0, 1, z_reset_geoip_city());
 SVARF(geoip_city_database, "GeoLiteCity.dat", z_reset_geoip_city());
+
 VAR(geoip_show_ip, 0, 2, 2);
 VAR(geoip_show_network, 0, 1, 2);
 VAR(geoip_show_city, 0, 0, 2);
@@ -116,8 +119,7 @@ static void z_init_geoip()
 #ifdef USE_GEOIP
 static const char *z_geoip_decode_continent(const char *cont)
 {
-    if(cont[0] == '-' || cont[1] == '-') return NULL;
-    else if(cont[0] == 'A' && cont[1] == 'F') return "Africa";
+    if(cont[0] == 'A' && cont[1] == 'F') return "Africa";
     else if(cont[0] == 'A' && cont[1] == 'S') return "Asia";
     else if(cont[0] == 'E' && cont[1] == 'U') return "Europe";
     else if(cont[0] == 'N' && cont[1] == 'A') return "North America";
@@ -127,17 +129,17 @@ static const char *z_geoip_decode_continent(const char *cont)
 }
 #endif
 
-void z_geoip_resolveclient(clientinfo *ci)
+void z_geoip_resolveclient(geoipstate &gs, enet_uint32 ip)
 {
-    if(!geoip_enable || !ci) return;
-    ci->geoip.cleanup();
+    if(!geoip_enable) return;
+    gs.cleanup();
     z_init_geoip();
-    uint ip = ENET_NET_TO_HOST_32(getclientip(ci->clientnum));
-    if(!ip) return; // local client
+    ip = ENET_NET_TO_HOST_32(ip);
+    if(!ip) return;
     // look in list of reserved ips
     loopi(sizeof(reservedips)/sizeof(reservedips[0])) if((ip & reservedips[i].mask) == reservedips[i].ip)
     {
-        ci->geoip.network = newstring(reservedips[i].name);
+        gs.network = newstring(reservedips[i].name);
         // if ip is reserved, geoip won't find it anyway
         return;
     }
@@ -225,7 +227,7 @@ void z_geoip_resolveclient(clientinfo *ci)
     if(geoip_show_continent && continent_code && continent_code[0])
     {
         const char *continent_name = z_geoip_decode_continent(continent_code);
-        if(continent_name) ci->geoip.continent = newstring(continent_name);
+        if(continent_name) gs.continent = newstring(continent_name);
     }
 
     const char *network_name = NULL;
@@ -234,7 +236,7 @@ void z_geoip_resolveclient(clientinfo *ci)
     {
         if(country_code[0] == 'A' && country_code[1] >= '0' && country_code[1] <= '9')  // anonymous network
         {
-            ci->geoip.anonymous = true;
+            gs.anonymous = country_code[1]-'0';
             network_name = country_name;
             country_name = NULL;
         }
@@ -260,7 +262,7 @@ void z_geoip_resolveclient(clientinfo *ci)
         if(country_name[0])
         {
             len = decodeutf8(buf, sizeof(buf)-1, (const uchar *)country_name, strlen(country_name));
-            if(len > 0) { buf[len] = '\0'; ci->geoip.country = newstring((const char *)buf); }
+            if(len > 0) { buf[len] = '\0'; gs.country = newstring((const char *)buf); }
         }
     }
 
@@ -272,152 +274,24 @@ void z_geoip_resolveclient(clientinfo *ci)
             if(region)
             {
                 len = decodeutf8(buf, sizeof(buf)-1, (const uchar *)region, strlen(region));
-                if(len > 0) { buf[len] = '\0'; ci->geoip.region = newstring((const char *)buf); }
+                if(len > 0) { buf[len] = '\0'; gs.region = newstring((const char *)buf); }
             }
         }
         if(geoip_show_city && gir->city)
         {
             len = decodeutf8(buf, sizeof(buf)-1, (const uchar *)gir->city, strlen(gir->city));
-            if(len > 0) { buf[len] = '\0'; ci->geoip.city = newstring((const char *)buf); }
+            if(len > 0) { buf[len] = '\0'; gs.city = newstring((const char *)buf); }
         }
     }
 
     if(network_name && network_name[0])
     {
         // not expecting to get utf8 encoded string
-        ci->geoip.network = newstring(network_name);
+        gs.network = newstring(network_name);
     }
 
     if(gir) GeoIPRecord_delete(gir);
 #endif // USE_GEOIP
 }
-
-static void z_geoip_gencolors(char *cbuf)
-{
-    size_t slen = strlen(geoip_color_scheme), len = min<size_t>(slen, 3);
-    for(size_t i = 0; i < len; i++)
-    {
-        cbuf[i] = geoip_color_scheme[i];
-        if(cbuf[i] < '0' || cbuf[i] > '9') cbuf[i] = '7';
-    }
-    for(size_t i = len; i < 3; i++) cbuf[i] = len > 0 ? cbuf[len-1] : '7';
-}
-
-static void z_geoip_print(vector<char> &buf, clientinfo *ci, bool admin)
-{
-    const char *comp[] =
-    {
-        (admin ? geoip_show_ip : geoip_show_ip == 1) ? getclienthostname(ci->clientnum) : NULL,
-        (admin ? geoip_show_network : geoip_show_network == 1) ? ci->geoip.network : NULL,
-        (admin ? geoip_show_city : geoip_show_city == 1) ? ci->geoip.city : NULL,
-        (admin ? geoip_show_region : geoip_show_region == 1) ? ci->geoip.region : NULL,
-        (admin ? geoip_show_country : geoip_show_country == 1) ? ci->geoip.country : NULL,
-        (admin ? geoip_show_continent : geoip_show_continent == 1) ? ci->geoip.continent : NULL
-    };
-    int lastc = -1;
-    loopi(sizeof(comp)/sizeof(comp[0])) if(comp[i])
-    {
-        if(geoip_skip_duplicates && lastc >= 0 && (geoip_skip_duplicates > 1 || (lastc + 1) == i) && !strcmp(comp[i], comp[lastc])) continue;
-        lastc = i;
-        if(buf.length()) { buf.add(','); buf.add(' '); }
-        buf.put(comp[i], strlen(comp[i]));
-    }
-    buf.add('\0');
-}
-
-void z_geoip_show(clientinfo *ci)
-{
-    if(!geoip_enable || !ci) return;
-
-    char colors[3];
-    z_geoip_gencolors(colors);
-
-    vector<char> cbufs[2];
-    packetbuf *qpacks[2] = { NULL, NULL };
-    for(int i = demorecord ? -1 : 0; i < clients.length(); i++) if(i < 0 || clients[i]->state.aitype==AI_NONE)
-    {
-        bool isadmin = i >= 0 && (clients[i]->privilege >= PRIV_ADMIN || clients[i]->local);
-        int idx = isadmin ? 1 : 0;
-        if(!qpacks[idx])
-        {
-            if(cbufs[idx].empty())
-            {
-                if(ci->local)
-                {
-                    const bool show = (isadmin ? geoip_show_ip : geoip_show_ip == 1) || (isadmin ? geoip_show_network : geoip_show_network == 1);
-                    if(show) cbufs[idx].put("local client", strlen("local client"));
-                    cbufs[idx].add('\0');
-                }
-                else z_geoip_print(cbufs[idx], ci, isadmin);
-            }
-            if(cbufs[idx].length() <= 1) continue;
-            qpacks[idx] = new packetbuf(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
-            packetbuf &p = *qpacks[idx];
-            putint(p, N_SERVMSG);
-            sendstring(tempformatstring("\f%c%s \f%cconnected %s \f%c%s",
-                                        colors[0], colorname(ci), colors[1], ci->local ? "as" : "from", colors[2], cbufs[idx].getbuf()), p);
-            p.finalize();
-        }
-        if(i >= 0) sendpacket(clients[i]->clientnum, 1, qpacks[idx]->packet);
-        else recordpacket(1, qpacks[idx]->packet->data, qpacks[idx]->packet->dataLength);
-    }
-    loopi(2) DELETEP(qpacks[i]);
-}
-
-void z_servcmd_geoip(int argc, char **argv, int sender)
-{
-    int i, cn;
-    clientinfo *ci, *senderci = getinfo(sender);
-    vector<clientinfo *> cis;
-    vector<char> buf;
-    char c[3];
-    bool isadmin = senderci->privilege>=PRIV_ADMIN || senderci->local;
-    for(i = 1; i < argc; i++)
-    {
-        if(!z_parseclient(argv[i], &cn)) goto fail;
-        if(cn < 0)
-        {
-            cis.shrink(0);
-            loopvj(clients) if(clients[j]->state.aitype==AI_NONE && (!clients[j]->spy || isadmin)) cis.add(clients[j]);
-            break;
-        }
-        ci = getinfo(cn);
-        if(!ci || ((!ci->connected || ci->spy) && !isadmin)) goto fail;
-        if(cis.find(ci)<0) cis.add(ci);
-    }
-
-    if(cis.empty()) { sendf(sender, 1, "ris", N_SERVMSG, "please specify client number"); return; }
-
-    z_geoip_gencolors(c);
-
-    for(i = 0; i < cis.length(); i++)
-    {
-        buf.setsize(0);
-        if(cis[i]->state.aitype==AI_NONE)
-        {
-            if(cis[i]->local)
-            {
-                const bool show = (isadmin ? geoip_show_ip : geoip_show_ip == 1) || (isadmin ? geoip_show_network : geoip_show_network == 1);
-                if(show) buf.put("local client", strlen("local client"));
-                buf.add('\0');
-            }
-            else z_geoip_print(buf, cis[i], isadmin);
-        }
-        if(buf.length() > 1) sendf(sender, 1, "ris", N_SERVMSG,
-            tempformatstring("\f%c%s \f%cis connected %s \f%c%s", c[0], colorname(cis[i]), c[1], cis[i]->local ? "as" : "from", c[2], buf.getbuf()));
-        else sendf(sender, 1, "ris", N_SERVMSG,
-            tempformatstring("\f%cfailed to get any geoip information about \f%c%s", c[1], c[0], colorname(cis[i])));
-    }
-    return;
-fail:
-    sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[i]));
-}
-SCOMMANDN(geoip, PRIV_NONE, z_servcmd_geoip);
-SCOMMANDNH(getip, PRIV_NONE, z_servcmd_geoip);
-
-ICOMMAND(s_geoip_resolveclients, "", (),
-{
-    loopv(clients) if(clients[i]->state.aitype == AI_NONE) z_geoip_resolveclient(clients[i]);
-});
 
 #endif // Z_GEOIP_H

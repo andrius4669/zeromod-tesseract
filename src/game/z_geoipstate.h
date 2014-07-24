@@ -3,13 +3,14 @@
 
 struct geoipstate
 {
-    // network identifies which network client is in, like local area network, localhost, anonymous proxy, etc
     char *network, *city, *region, *country, *continent;
-    // marked as anonymous network in geoip database
-    bool anonymous;
+    // 1 - anonymous proxy, 2 - satellite provider
+    int anonymous;
     
-    geoipstate(): network(NULL), city(NULL), region(NULL), country(NULL), continent(NULL), anonymous(false) {}
-    geoipstate(const geoipstate &s): network(NULL), city(NULL), region(NULL), country(NULL), continent(NULL), anonymous(false) { *this = s; }
+    geoipstate(): network(NULL), city(NULL), region(NULL),
+        country(NULL), continent(NULL), anonymous(0) {}
+    geoipstate(const geoipstate &s): network(NULL), city(NULL), region(NULL),
+        country(NULL), continent(NULL), anonymous(0) { *this = s; }
     ~geoipstate() { cleanup(); }
     
     void cleanup()
@@ -19,7 +20,7 @@ struct geoipstate
         DELETEP(region);
         DELETEP(country);
         DELETEP(continent);
-        anonymous = false;
+        anonymous = 0;
     }
     
     geoipstate &operator =(const geoipstate &s)

@@ -2828,6 +2828,7 @@ namespace server
     }
 
     #include "z_geoip.h"
+    #include "z_geoipserver.h"
 
     void connected(clientinfo *ci)
     {
@@ -2855,7 +2856,7 @@ namespace server
         aiman::addclient(ci);
 
         logoutf("connect: %s (%d) joined", ci->name, ci->clientnum);
-        z_geoip_resolveclient(ci);
+        z_geoip_resolveclient(ci->geoip, getclientip(ci->clientnum));
         z_geoip_show(ci);
         
         if(m_demo) setupdemoplayback();

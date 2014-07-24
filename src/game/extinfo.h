@@ -29,9 +29,11 @@
     B:C:default: 0 command EXT_ACK EXT_VERSION EXT_ERROR
 */
 
-    VAR(extinfo_showip, 0, 1, 1);
-    VAR(extinfo_showpriv, 0, 1, 2);
-    VAR(extinfo_showspy, 0, 0, 1);
+    VAR(extinfo_enable, 0, 1, 1);   // enable extinfo functionality
+    VAR(extinfo_showip, 0, 1, 1);   // show ips of clients
+    VAR(extinfo_showname, 0, 1, 1); // show names of clients
+    VAR(extinfo_showpriv, 0, 1, 2); // show privileges of clients
+    VAR(extinfo_showspy, 0, 0, 1);  // show spy clients
 
     void extinfoplayer(ucharbuf &p, clientinfo *ci)
     {
@@ -39,7 +41,7 @@
         putint(q, EXT_PLAYERSTATS_RESP_STATS); // send player stats following
         putint(q, ci->clientnum); //add player id
         putint(q, ci->ping);
-        sendstring(ci->name, q);
+        sendstring(extinfo_showname ? ci->name : "", q);
         sendstring(teamname(m_teammode ? ci->team : 0), q);
         putint(q, ci->state.frags);
         putint(q, ci->state.flags);
@@ -87,6 +89,7 @@
 
     void extserverinforeply(ucharbuf &req, ucharbuf &p)
     {
+        if(!extinfo_enable) return;
         int extcmd = getint(req); // extended commands
 
         //Build a new packet
