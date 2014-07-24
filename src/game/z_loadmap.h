@@ -1,5 +1,5 @@
 #ifndef Z_LOADMAP_H
-#define Z_LOADMAP_H 1
+#define Z_LOADMAP_H
 
 bool z_loadmap(const char *mname, stream *&data = mapdata)
 {
@@ -24,4 +24,4 @@ void z_servcmd_loadmap(int argc, char **argv, int sender)
 }
 SCOMMANDNA(loadmap, PRIV_MASTER, z_servcmd_loadmap, 1);
 
-#endif //Z_LOADMAP_H
+#endif // Z_LOADMAP_H

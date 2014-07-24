@@ -1,5 +1,5 @@
 #ifndef Z_SENDMAP_H
-#define Z_SENDMAP_H 1
+#define Z_SENDMAP_H
 
 #include "z_servcmd.h"
 
@@ -49,4 +49,4 @@ failcn:
 SCOMMANDNA(sendmap, PRIV_MASTER, z_servcmd_sendmap, 1);
 SCOMMANDNAH(sendto, PRIV_MASTER, z_servcmd_sendmap, 1);
 
-#endif //Z_SENDMAP_H
+#endif // Z_SENDMAP_H

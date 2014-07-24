@@ -834,4 +834,5 @@ void renderminimapmaterials()
     gle::disable();
     glEnable(GL_CULL_FACE);
 }
+
 #endif

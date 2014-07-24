@@ -1,5 +1,5 @@
 #ifndef Z_SERVERCOMMANDS_H
-#define Z_SERVERCOMMANDS_H 1
+#define Z_SERVERCOMMANDS_H
 
 typedef void (* z_scmdfun)(int argc, char **argv, int sender);
 
@@ -80,4 +80,4 @@ void z_servcmd_set_privilege(const char *cmd, int privilege)
 #define SCOMMANDNA(_name, _priv, _func, _args) SCOMMANDZ(_name, _priv, _func, _args, false)
 #define SCOMMANDNAH(_name, _priv, _func, _args) SCOMMANDZ(_name, _priv, _func, _args, true)
 
-#endif //Z_SERVERCOMMANDS_H
+#endif // Z_SERVERCOMMANDS_H

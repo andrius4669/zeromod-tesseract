@@ -855,7 +855,7 @@ extern void linkslotshader(Slot &s, bool load = true);
 extern void linkvslotshader(VSlot &s, bool load = true);
 extern void linkslotshaders();
 #endif
-extern const char *getshaderparamname(const char *name);
+extern const char *getshaderparamname(const char *name, bool insert = true);
 #ifndef STANDALONE
 extern void setupshaders();
 extern void reloadshaders();
@@ -879,6 +879,8 @@ extern DecalSlot &lookupdecalslot(int slot, bool load = true);
 extern VSlot *findvslot(Slot &slot, const VSlot &src, const VSlot &delta);
 extern VSlot *editvslot(const VSlot &src, const VSlot &delta);
 extern void mergevslot(VSlot &dst, const VSlot &src, const VSlot &delta);
+extern void packvslot(vector<uchar> &buf, const VSlot &src);
+extern bool unpackvslot(ucharbuf &buf, VSlot &dst, bool delta);
 
 extern Slot dummyslot;
 extern VSlot dummyvslot;

@@ -1347,7 +1347,7 @@ VARP(zoomfov, 10, 42, 60);
 VARP(fov, 10, 100, 150);
 VAR(avatarzoomfov, 1, 1, 1);
 VAR(avatarfov, 10, 40, 100);
-FVAR(avatardepth, 0, 0.8f, 1);
+FVAR(avatardepth, 0, 0.7f, 1);
 FVARNP(aspect, forceaspect, 0, 0, 1e3f);
 
 static float zoomprogress = 0;
@@ -2456,6 +2456,9 @@ void gl_drawview()
     GLERROR;
 
     if(fogmat) setfog(fogmat, fogbelow, 1, abovemat);
+
+    rendervolumetric();
+    GLERROR;
 
     if(editmode)
     {

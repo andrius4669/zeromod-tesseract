@@ -103,6 +103,7 @@ extern void compacteditvslots();
 extern void compactmruvslots();
 extern void compactvslots(cube *c, int n = 8);
 extern void compactvslot(int &index);
+extern void compactvslot(VSlot &vs);
 extern int compactvslots(bool cull = false);
 extern void reloadtextures();
 extern void cleanuptextures();
@@ -297,8 +298,6 @@ static inline void masktiles(uint *tiles, float sx1, float sy1, float sx2, float
 
 enum { SM_NONE = 0, SM_REFLECT, SM_CUBEMAP, SM_CASCADE, SM_SPOT };
 
-enum { L_NOSHADOW = 1<<0, L_NODYNSHADOW = 1<<1 };
-
 extern int shadowmapping;
 
 extern vec shadoworigin, shadowdir;
@@ -309,6 +308,9 @@ extern matrix4 shadowmatrix;
 extern void loaddeferredlightshaders();
 extern void cleardeferredlightshaders();
 extern void clearshadowcache();
+
+extern void rendervolumetric();
+extern void cleanupvolumetric();
 
 extern void findshadowvas();
 extern void findshadowmms();
@@ -357,6 +359,7 @@ enum { AA_UNUSED = 0, AA_LUMA, AA_VELOCITY, AA_VELOCITY_MASKED, AA_SPLIT, AA_SPL
 
 extern void cleanupgbuffer();
 extern void initgbuffer();
+extern bool usepacknorm();
 extern void maskgbuffer(const char *mask);
 extern void bindgdepth();
 extern void preparegbuffer(bool depthclear = true);
@@ -401,6 +404,7 @@ extern void cleanupaa();
 extern char *entname(entity &e);
 extern bool haveselent();
 extern undoblock *copyundoents(undoblock *u);
+extern void pasteundoent(int idx, const entity &ue);
 extern void pasteundoents(undoblock *u);
 
 // octaedit
@@ -480,7 +484,7 @@ extern void rendershadowmesh(shadowmesh *m);
 
 extern void updatedynlights();
 extern int finddynlights();
-extern bool getdynlight(int n, vec &o, float &radius, vec &color, vec &dir, int &spot);
+extern bool getdynlight(int n, vec &o, float &radius, vec &color, vec &dir, int &spot, int &flags);
 
 // material
 

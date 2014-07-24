@@ -1,5 +1,5 @@
 #ifndef Z_SERVCMD_H
-#define Z_SERVCMD_H 1
+#define Z_SERVCMD_H
 
 #include "z_servercommands.h"
 
@@ -85,4 +85,4 @@ void z_servcmd_parse(int sender, char *text)
     cc->fun(argc, argv, sender);
 }
 
-#endif //Z_SERVCMD_H
+#endif // Z_SERVCMD_H

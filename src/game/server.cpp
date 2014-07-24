@@ -1510,7 +1510,7 @@ namespace server
         }
 
         uchar operator[](int msg) const { return msg >= 0 && msg < NUMMSG ? msgmask[msg] : 0; }
-    } msgfilter(-1, N_CONNECT, N_SERVINFO, N_INITCLIENT, N_WELCOME, N_MAPCHANGE, N_SERVMSG, N_DAMAGE, N_HITPUSH, N_SHOTFX, N_EXPLODEFX, N_DIED, N_SPAWNSTATE, N_FORCEDEATH, N_TEAMINFO, N_ITEMACC, N_ITEMSPAWN, N_TIMEUP, N_CDIS, N_CURRENTMASTER, N_PONG, N_RESUME, N_SENDDEMOLIST, N_SENDDEMO, N_DEMOPLAYBACK, N_SENDMAP, N_DROPFLAG, N_SCOREFLAG, N_RETURNFLAG, N_RESETFLAG, N_CLIENT, N_AUTHCHAL, N_INITAI, N_DEMOPACKET, -2, N_CALCLIGHT, N_REMIP, N_NEWMAP, N_GETMAP, N_SENDMAP, N_CLIPBOARD, -3, N_EDITENT, N_EDITF, N_EDITT, N_EDITM, N_FLIP, N_COPY, N_PASTE, N_ROTATE, N_REPLACE, N_DELCUBE, N_EDITVAR, -4, N_POS, NUMMSG),
+    } msgfilter(-1, N_CONNECT, N_SERVINFO, N_INITCLIENT, N_WELCOME, N_MAPCHANGE, N_SERVMSG, N_DAMAGE, N_HITPUSH, N_SHOTFX, N_EXPLODEFX, N_DIED, N_SPAWNSTATE, N_FORCEDEATH, N_TEAMINFO, N_ITEMACC, N_ITEMSPAWN, N_TIMEUP, N_CDIS, N_CURRENTMASTER, N_PONG, N_RESUME, N_SENDDEMOLIST, N_SENDDEMO, N_DEMOPLAYBACK, N_SENDMAP, N_DROPFLAG, N_SCOREFLAG, N_RETURNFLAG, N_RESETFLAG, N_CLIENT, N_AUTHCHAL, N_INITAI, N_DEMOPACKET, -2, N_CALCLIGHT, N_REMIP, N_NEWMAP, N_GETMAP, N_SENDMAP, N_CLIPBOARD, -3, N_EDITENT, N_EDITF, N_EDITT, N_EDITM, N_FLIP, N_COPY, N_PASTE, N_ROTATE, N_REPLACE, N_DELCUBE, N_EDITVAR, N_EDITVSLOT, N_UNDO, N_REDO, -4, N_POS, NUMMSG),
       connectfilter(-1, N_CONNECT, -2, N_AUTHANS, -3, N_PING, NUMMSG);
 
     int checktype(int type, clientinfo *ci)
@@ -3040,7 +3040,7 @@ namespace server
                 int val = getint(p);
                 if(!ci->local && !m_edit) break;
                 if(val ? ci->state.state!=CS_ALIVE && ci->state.state!=CS_DEAD : ci->state.state!=CS_EDITING) break;
-                if(!allowmsg(ci, cm, type)) break;
+                if(!allowmsg(ci, ci, type)) break;
                 if(smode)
                 {
                     if(val) smode->leavegame(ci);
@@ -3228,7 +3228,7 @@ namespace server
             case N_SWITCHNAME:
             {
                 getstring(text, p);
-                if(!allowmsg(ci, cm, type)) break;
+                if(!allowmsg(ci, ci, type)) break;
                 filtertext(text, text, false, MAXNAMELEN);
                 if(!text[0]) copystring(text, "unnamed");
                 if(isdedicatedserver()) logoutf("rename: %s (%d) is now known as %s", ci->name, ci->clientnum, text);
@@ -3328,7 +3328,7 @@ namespace server
                     case ID_FVAR: getfloat(p); break;
                     case ID_SVAR: getstring(text, p);
                 }
-                if(ci && ci->state.state!=CS_SPECTATOR && allowmsg(ci, cm, N_EDITVAR)) QUEUE_MSG;
+                if(ci && ci->state.state!=CS_SPECTATOR && allowmsg(ci, ci, N_EDITVAR)) QUEUE_MSG;
                 break;
             }
 
@@ -3483,7 +3483,7 @@ namespace server
             {
                 int size = getint(p);
                 if(!ci->privilege && !ci->local && ci->state.state==CS_SPECTATOR) break;
-                if(!allowmsg(ci, cm, type)) break;
+                if(!allowmsg(ci, ci, type)) break;
                 if(size>=0)
                 {
                     smapname[0] = '\0';
@@ -3601,7 +3601,7 @@ namespace server
                 goto genericmsg;
 
             case N_PASTE:
-                if(ci->state.state!=CS_SPECTATOR && allowmsg(ci, cq, type)) sendclipboard(ci);
+                if(ci->state.state!=CS_SPECTATOR && allowmsg(ci, ci, type)) sendclipboard(ci);
                 goto genericmsg;
 
             case N_CLIPBOARD:
@@ -3629,9 +3629,44 @@ namespace server
                 break;
             }
 
+            case N_EDITT:
+            case N_REPLACE:
+            case N_EDITVSLOT:
+            {
+                int size = server::msgsizelookup(type);
+                if(size<=0) { disconnect_client(sender, DISC_MSGERR); return; }
+                loopi(size-1) getint(p);
+                if(p.remaining() < 2) { disconnect_client(sender, DISC_MSGERR); return; }
+                int extra = lilswap(*(const ushort *)p.pad(2));
+                if(p.remaining() < extra) { disconnect_client(sender, DISC_MSGERR); return; }                
+                p.pad(extra); 
+                if(ci && ci->state.state!=CS_SPECTATOR && allowmsg(ci, ci, type)) QUEUE_MSG;
+                break;
+            }
+  
+            case N_UNDO:
+            case N_REDO:
+            {
+                int unpacklen = getint(p), packlen = getint(p);
+                if(!ci || ci->state.state == CS_SPECTATOR || !allowmsg(ci, ci, type) || packlen <= 0 || packlen > (1<<16) || unpacklen <= 0)
+                {
+                    if(packlen > 0) p.subbuf(packlen);
+                    break;
+                }
+                if(p.remaining() < packlen) { disconnect_client(sender, DISC_MSGERR); return; }
+                packetbuf q(32 + packlen, ENET_PACKET_FLAG_RELIABLE);
+                putint(q, type);
+                putint(q, ci->clientnum);
+                putint(q, unpacklen);
+                putint(q, packlen);
+                if(packlen > 0) p.get(q.subbuf(packlen).buf, packlen);
+                sendpacket(-1, 1, q.finalize(), ci->clientnum);
+                break;
+            }
+
             case N_SERVCMD:
                 getstring(text, p);
-                if(text[0]) z_servcmd_parse(sender, text);
+                if(iscubealnum(text[0])) z_servcmd_parse(sender, text);
                 break;
 
             #define PARSEMESSAGES 1
@@ -3651,7 +3686,11 @@ namespace server
                 int size = server::msgsizelookup(type);
                 if(size<=0) { disconnect_client(sender, DISC_MSGERR); return; }
                 loopi(size-1) getint(p);
-                if(ci && cq && (ci != cq || (ci->state.state!=CS_SPECTATOR && allowmsg(ci, cq, type)))) { QUEUE_AI; QUEUE_MSG; }
+                if(ci) switch(msgfilter[type])
+                {
+                    case 2: case 3: if(ci->state.state != CS_SPECTATOR && allowmsg(ci, ci, type)) QUEUE_MSG; break;
+                    default: if(cq && (ci != cq || ci->state.state!=CS_SPECTATOR)) { QUEUE_AI; QUEUE_MSG; } break;
+                }
                 break;
             }
         }

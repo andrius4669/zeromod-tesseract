@@ -381,8 +381,9 @@ static void calcsurfaces(cube &c, const ivec &co, int size, int usefacemask, int
             continue;
         }
 
+#ifdef STANDALONE
         VSlot &vslot = lookupvslot(c.texture[i], false);
-#if 0
+#else
         VSlot &vslot = lookupvslot(c.texture[i], false),
              *layer = vslot.layer && !(c.material&MAT_ALPHA) ? &lookupvslot(vslot.layer, false) : NULL;
         Shader *shader = vslot.slot->shader;
@@ -695,7 +696,7 @@ void lightreaching(const vec &target, vec &color, vec &dir, bool fast, extentity
         //    conoutf(CON_DEBUG, "%d - %f %f", i, intensity, mag);
         //}
 
-        vec lightcol = vec(e.attr2, e.attr3, e.attr4).mul(1.0f/255);
+        vec lightcol = vec(e.attr2, e.attr3, e.attr4).mul(1.0f/255).max(0);
         color.add(vec(lightcol).mul(intensity));
         dir.add(vec(ray).mul(-intensity*lightcol.x*lightcol.y*lightcol.z));
     }
@@ -709,4 +710,5 @@ void lightreaching(const vec &target, vec &color, vec &dir, bool fast, extentity
     if(dir.iszero()) dir = vec(0, 0, 1);
     else dir.normalize();
 }
+
 #endif
