@@ -1,6 +1,8 @@
 #ifndef Z_SAVEMAP_H
 #define Z_SAVEMAP_H
 
+#include "z_servcmd.h"
+
 bool z_savemap(const char *mname, stream *&file = mapdata)
 {
     if(!file) return false;

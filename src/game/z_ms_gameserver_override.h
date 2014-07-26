@@ -164,4 +164,4 @@ void processmasterinput(int m, const char *cmd, int cmdlen, const char *args)
         addgban(m, val);
 }
 
-#endif //Z_MS_GAMESERVER_OVERRIDE_H
+#endif // Z_MS_GAMESERVER_OVERRIDE_H

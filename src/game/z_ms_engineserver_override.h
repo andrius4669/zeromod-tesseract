@@ -1,5 +1,5 @@
 #ifndef Z_MS_ENGINESERVER_OVERRIDE_H
-#define Z_MS_ENGINESERVER_OVERRIDE_H 1
+#define Z_MS_ENGINESERVER_OVERRIDE_H
 
 ENetAddress serveraddress = { ENET_HOST_ANY, ENET_PORT_ANY };
 
@@ -268,4 +268,4 @@ const char *getmasterauth(int m)
 
 int nummss() { return mss.length(); }
 
-#endif //Z_MS_ENGINESERVER_OVERRIDE_H
+#endif // Z_MS_ENGINESERVER_OVERRIDE_H

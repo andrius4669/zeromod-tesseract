@@ -1,5 +1,5 @@
 #ifndef Z_AUTOSENDMAP_H
-#define Z_AUTOSENDMAP_H 1
+#define Z_AUTOSENDMAP_H
 
 #include "z_triggers.h"
 #include "z_sendmap.h"
@@ -17,7 +17,7 @@ Z_TRIGGER(z_autosendmap_trigger, Z_TRIGGER_NOCLIENTS);
 
 static void z_servcmd_autosendmap(int argc, char **argv, int sender)
 {
-    int val = argc >= 2 && argv[1] && *argv[1] ? atoi(argv[1]) : -1;
+    int val = argc >= 2 ? atoi(argv[1]) : -1;
     if(!strcmp(argv[0], "autosendmap"))
     {
         if(val < 0) sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("autosendmap is %s", z_autosendmap ? "enabled" : "disabled"));
@@ -42,4 +42,4 @@ static void z_servcmd_autosendmap(int argc, char **argv, int sender)
 SCOMMANDNA(autosendmap, PRIV_MASTER, z_servcmd_autosendmap, 1);
 SCOMMANDNA(connectsendmap, PRIV_MASTER, z_servcmd_autosendmap, 1);
 
-#endif //Z_AUTOSENDMAP_H
+#endif // Z_AUTOSENDMAP_H

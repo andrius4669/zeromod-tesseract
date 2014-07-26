@@ -1,5 +1,5 @@
 #ifndef Z_GBANS_OVERRIDE_H
-#define Z_GBANS_OVERRIDE_H 1
+#define Z_GBANS_OVERRIDE_H
 
 struct gbaninfo
 {
@@ -64,4 +64,4 @@ COMMAND(pban, "s");
 void clearpbans() { loopvrev(gbans) if(gbans[i].master < 0) gbans.removeunordered(i); }
 COMMAND(clearpbans, "");
 
-#endif //Z_GBANS_OVERRIDE_H
+#endif // Z_GBANS_OVERRIDE_H

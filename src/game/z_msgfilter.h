@@ -31,6 +31,7 @@ bool allowmsg(clientinfo *ci, clientinfo *cq, int type)
         case N_UNDO: case N_REDO:
             if(ci->editmute)
             {
+                if(type == N_COPY || type == N_CLIPBOARD) ci->cleanclipboard();
                 const char *msg;
                 switch(type)
                 {

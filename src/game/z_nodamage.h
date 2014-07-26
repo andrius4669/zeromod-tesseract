@@ -19,7 +19,7 @@ VARF(servernodamage_global, 0, 1, 1,
 
 static void z_servcmd_nodamage(int argc, char **argv, int sender)
 {
-    int val = argc >= 2 && argv[1] && *argv[1] ? atoi(argv[1]) : -1;
+    int val = argc >= 2 ? atoi(argv[1]) : -1;
     clientinfo *senderci = getinfo(sender), *ci;
 
     if(servernodamage_global)

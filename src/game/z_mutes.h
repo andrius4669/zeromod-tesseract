@@ -63,6 +63,7 @@ static void z_servcmd_mute(int argc, char **argv, int sender)
     }
 
     return;
+
 cnfail:
     sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[1]));
 }
@@ -85,7 +86,7 @@ Z_TRIGGER(z_trigger_autoeditmute, Z_TRIGGER_NOCLIENTS);
 void z_servcmd_autoeditmute(int argc, char **argv, int sender)
 {
     int val = -1;
-    if(argc > 1 && argv[1] && *argv[1]) val = atoi(argv[1]);
+    if(argc > 1) val = atoi(argv[1]);
     if(val >= 0)
     {
         z_autoeditmute = val!=0;
@@ -95,4 +96,4 @@ void z_servcmd_autoeditmute(int argc, char **argv, int sender)
 }
 SCOMMANDNA(autoeditmute, PRIV_MASTER, z_servcmd_autoeditmute, 1);
 
-#endif //Z_MUTES_H
+#endif // Z_MUTES_H

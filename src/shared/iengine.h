@@ -457,7 +457,9 @@ extern void moveragdoll(dynent *d);
 extern void cleanragdoll(dynent *d);
 
 // server
+#ifndef MAXCLIENTS
 #define MAXCLIENTS 128                 // DO NOT set this any higher
+#endif
 #define MAXTRANS 5000                  // max amount of data to swallow in 1 go
 
 extern int maxclients;
