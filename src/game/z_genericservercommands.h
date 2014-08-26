@@ -143,5 +143,6 @@ SCOMMANDNA(pm, PRIV_NONE, z_servcmd_pm, 2);
 #include "z_savemap.h"
 
 #include "z_rename.h"
+#include "z_spy.h"
 
 #endif //Z_GENERICSERVERCOMMANDS_H

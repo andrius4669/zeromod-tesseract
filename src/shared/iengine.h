@@ -475,6 +475,7 @@ extern void flushserver(bool force);
 extern int getservermtu();
 extern int getnumclients();
 extern uint getclientip(int n);
+extern uint getserverinfoip();
 extern const char *getclienthostname(int i);
 extern void localconnect();
 extern const char *disconnectreason(int reason);

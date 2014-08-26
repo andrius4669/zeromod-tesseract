@@ -1,6 +1,5 @@
 #include "engine.h"
 
-#ifndef STANDALONE
 extern int outline;
 
 bool boxoutline = false;
@@ -60,7 +59,6 @@ void boxsgrid(int orient, vec o, vec s, int g)
     }
     xtraverts += gle::end();
 }
-#endif
 
 selinfo sel, lastsel, savedsel;
 
@@ -127,7 +125,6 @@ void cancelsel()
     entcancel();
 }
 
-#ifndef STANDALONE
 void toggleedit(bool force)
 {
     if(!force)
@@ -168,9 +165,6 @@ bool noedit(bool view, bool msg)
     if(!viewable && msg) conoutf(CON_ERROR, "selection not in view");
     return !viewable;
 }
-#else
-bool noedit(bool view, bool msg) { return false; }
-#endif
 
 void reorient()
 {
@@ -198,9 +192,7 @@ void selextend()
     }
 }
 
-#ifndef STANDALONE
 ICOMMAND(edittoggle, "", (), toggleedit(false));
-#endif
 COMMAND(entcancel, "");
 COMMAND(cubecancel, "");
 COMMAND(cancelsel, "");
@@ -282,7 +274,6 @@ void updateselection()
     sel.s.z = abs(lastcur.z-cur.z)/sel.grid+1;
 }
 
-#ifndef STANDALONE
 bool editmoveplane(const vec &o, const vec &ray, int d, float off, vec &handle, vec &dest, bool first)
 {
     plane pl(d, off);
@@ -295,7 +286,6 @@ bool editmoveplane(const vec &o, const vec &ray, int d, float off, vec &handle, 
     dest.sub(handle);
     return true;
 }
-#endif
 
 namespace hmap { inline bool isheightmap(int orient, int d, bool empty, cube *c); }
 extern void entdrag(const vec &ray);
@@ -306,7 +296,6 @@ extern float rayent(const vec &o, const vec &ray, float radius, int mode, int si
 VAR(gridlookup, 0, 0, 1);
 VAR(passthroughcube, 0, 1, 1);
 
-#ifndef STANDALONE
 void rendereditcursor()
 {
     int d   = dimension(sel.orient),
@@ -508,7 +497,6 @@ void tryedit()
     if(!editmode || hidehud || mainmenu) return;
     if(blendpaintmode) trypaintblendmap();
 }
-#endif
 
 //////////// ready changes to vertex arrays ////////////
 
@@ -521,7 +509,6 @@ void readychanges(const ivec &bbmin, const ivec &bbmax, cube *c, const ivec &cor
         ivec o(i, cor, size);
         if(c[i].ext)
         {
-#ifndef STANDALONE
             if(c[i].ext->va)             // removes va s so that octarender will recreate
             {
                 int hasmerges = c[i].ext->va->hasmerges;
@@ -529,7 +516,6 @@ void readychanges(const ivec &bbmin, const ivec &bbmax, cube *c, const ivec &cor
                 c[i].ext->va = NULL;
                 if(hasmerges) invalidatemerges(c[i], o, size, true);
             }
-#endif
             freeoctaentities(c[i]);
             c[i].ext->tjoints = -1;
         }
@@ -552,20 +538,16 @@ void commitchanges(bool force)
     if(!force && !haschanged) return;
     haschanged = false;
 
-#ifndef STANDALONE
     extern vector<vtxarray *> valist;
     int oldlen = valist.length();
     resetclipplanes();
-#endif
     entitiesinoctanodes();
-#ifndef STANDALONE
     inbetweenframes = false;
     octarender();
     inbetweenframes = true;
     setupmaterials(oldlen);
     clearshadowcache();
     updatevabbs();
-#endif
 }
 
 void changed(const ivec &bbmin, const ivec &bbmax, bool commit)
@@ -651,7 +633,6 @@ void pasteundo(undoblock *u)
     else pasteundoblock(u->block(), u->gridmap());
 }
 
-#ifndef STANDALONE
 static inline int undosize(undoblock *u)
 {
     if(u->numents) return u->numents*sizeof(undoent);
@@ -705,9 +686,7 @@ struct undolist
 };
 
 undolist undos, redos;
-#endif
 VARP(undomegs, 0, 5, 100);                              // bounded by n megs
-#ifndef STANDALONE
 int totalundos = 0;
 
 void pruneundos(int maxremain)                          // bound memory
@@ -730,7 +709,6 @@ void pruneundos(int maxremain)                          // bound memory
 void clearundos() { pruneundos(0); }
 
 COMMAND(clearundos, "");
-#endif
 
 undoblock *newundocube(const selinfo &s)
 {
@@ -747,7 +725,6 @@ undoblock *newundocube(const selinfo &s)
     return u;
 }
 
-#ifndef STANDALONE
 void addundo(undoblock *u)
 {
     u->size = undosize(u);
@@ -837,7 +814,6 @@ void swapundo(undolist &a, undolist &b, int op)
 
 void editundo() { swapundo(undos, redos, EDIT_UNDO); }
 void editredo() { swapundo(redos, undos, EDIT_REDO); }
-#endif
 
 // guard against subdivision
 #define protectsel(f) { undoblock *_u = newundocube(sel); f; if(_u) { pasteundo(_u); freeundo(_u); } }
@@ -1142,7 +1118,6 @@ bool packundo(int op, int &inlen, uchar *&outbuf, int &outlen)
     }
 }
 
-#ifndef STANDALONE
 struct prefabheader
 {
     char magic[4];
@@ -1212,7 +1187,6 @@ void saveprefab(char *name)
     conoutf("wrote prefab file %s", filename);
 }
 COMMAND(saveprefab, "s");
-#endif
 
 void pasteblock(block3 &b, selinfo &sel, bool local)
 {
@@ -1224,7 +1198,6 @@ void pasteblock(block3 &b, selinfo &sel, bool local)
     sel.orient = o;
 }
 
-#ifndef STANDALONE
 prefab *loadprefab(const char *name, bool msg = true)
 {
    prefab *b = prefabs.access(name);
@@ -1462,7 +1435,6 @@ void previewprefab(const char *name, const vec &color)
         renderprefab(*p, o, yaw, 0, 0, 1, color);
     }
 }
-#endif
 
 void mpcopy(editinfo *&e, selinfo &sel, bool local)
 {
@@ -1481,7 +1453,6 @@ void mppaste(editinfo *&e, selinfo &sel, bool local)
     if(e->copy) pasteblock(*e->copy, sel, local);
 }
 
-#ifndef STANDALONE
 void copy()
 {
     if(noedit(true)) return;
@@ -1507,7 +1478,6 @@ COMMAND(pastehilite, "");
 COMMAND(paste, "");
 COMMANDN(undo, editundo, "");
 COMMANDN(redo, editredo, "");
-#endif
 
 static vector<int *> editingvslots;
 struct vslotref
@@ -2025,13 +1995,11 @@ void pushsel(int *dir)
     int d = dimension(orient);
     int s = dimcoord(orient) ? -*dir : *dir;
     sel.o[d] += s*sel.grid;
-#ifndef STANDALONE
     if(selectionsurf==1)
     {
         player->o[d] += s*sel.grid;
         player->resetinterp();
     }
-#endif
 }
 
 void mpdelcube(selinfo &sel, bool local)
@@ -2602,15 +2570,12 @@ void flip()
 
 void mprotate(int cw, selinfo &sel, bool local)
 {
-    if(local)
-    {
-        game::edittrigger(sel, EDIT_ROTATE, cw);
-        makeundo();
-    }
+    if(local) game::edittrigger(sel, EDIT_ROTATE, cw);
     int d = dimension(sel.orient);
     if(!dimcoord(sel.orient)) cw = -cw;
     int m = sel.s[C[d]] < sel.s[R[d]] ? C[d] : R[d];
     int ss = sel.s[m] = max(sel.s[R[d]], sel.s[C[d]]);
+    if(local) makeundo();
     loop(z,sel.s[D[d]]) loopi(cw>0 ? 1 : 3)
     {
         loopxy(sel) rotatecube(selcube(x,y,z), d);
@@ -2718,7 +2683,6 @@ void editmat(char *name, char *filtername)
 
 COMMAND(editmat, "ss");
 
-#ifndef STANDALONE
 void rendertexturepanel(int w, int h)
 {
     if((texpaneltimer -= curtime)>0 && editmode)
@@ -2850,5 +2814,4 @@ EDITSTAT(glde, int, glde);
 EDITSTAT(geombatch, int, gbatches);
 EDITSTAT(oq, int, getnumqueries());
 EDITSTAT(pvs, int, getnumviewcells());
-#endif
 

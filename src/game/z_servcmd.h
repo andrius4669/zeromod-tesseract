@@ -24,12 +24,14 @@ bool z_parseclient(const char *str, int *cn)
 
 SVAR(servcmd_chars, "");
 
-char *z_servcmd_check(char *text)
+bool z_servcmd_check(char *&text)
 {
     const char *c = &servcmd_chars[0];
     while(*c != '\0' && *c != text[0]) c++;
-    if(*c == '\0' || text[1] == '\0') return NULL;
-    return &text[1];
+    if(*c == '\0' || text[1] == '\0') return false;
+    text++;
+    if(*text == *c) return false;
+    return true;
 }
 
 #define Z_MAXSERVCMDARGS 25

@@ -4,7 +4,6 @@
 // very robust (uses discrete steps at fixed fps).
 
 #include "engine.h"
-#ifndef STANDALONE
 #include "mpr.h"
 
 const int MAXCLIPPLANES = 1024;
@@ -32,7 +31,6 @@ void resetclipplanes()
         clipcacheversion = 2;
     }
 }
-#endif
 
 /////////////////////////  ray - cube collision ///////////////////////////////////////////////
 
@@ -53,7 +51,6 @@ bool pointincube(const clipplanes &p, const vec &v)
     return true;
 }
 
-#ifndef STANDALONE
 #define INTERSECTPLANES(setentry, exit) \
     float enterdist = -1e16f, exitdist = 1e16f; \
     loopi(p.size) \
@@ -641,7 +638,6 @@ bool plcollide(physent *d, const vec &dir)    // collide with player
     }
     return false;
 }
-#endif
 
 void rotatebb(vec &center, vec &radius, int yaw, int pitch, int roll)
 {
@@ -654,7 +650,6 @@ void rotatebb(vec &center, vec &radius, int yaw, int pitch, int roll)
     radius = orient.abstransform(radius);
 }
 
-#ifndef STANDALONE
 template<class E, class M>
 static inline bool mmcollide(physent *d, const vec &dir, const extentity &e, const vec &center, const vec &radius, int yaw, int pitch, int roll)
 {
@@ -2026,5 +2021,4 @@ bool entinmap(dynent *d, bool avoidplayers)        // brute force but effective 
     conoutf(CON_WARN, "can't find entity spawn spot! (%.1f, %.1f, %.1f)", d->o.x, d->o.y, d->o.z);
     return false;
 }
-#endif
 

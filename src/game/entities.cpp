@@ -14,13 +14,11 @@ namespace entities
     {
     }
 
-#if !defined(STANDALONE) || defined(OCTASERV)
+#ifndef STANDALONE
     vector<extentity *> ents;
 
     vector<extentity *> &getents() { return ents; }
-#endif
 
-#ifndef STANDALONE
     bool mayattach(extentity &e) { return false; }
     bool attachent(extentity &e, extentity &a) { return false; }
 

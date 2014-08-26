@@ -2,7 +2,6 @@
 
 #include "engine.h"
 
-#ifndef STANDALONE
 #ifdef __APPLE__
   #include "SDL2_image/SDL_image.h"
 #else
@@ -1466,7 +1465,6 @@ bool settexture(const char *name, int clamp)
     glBindTexture(GL_TEXTURE_2D, t->id);
     return t != notexture;
 }
-#endif
 
 vector<VSlot *> vslots;
 vector<Slot *> slots;
@@ -1683,15 +1681,11 @@ static void clampvslotoffset(VSlot &dst, Slot *slot = NULL)
     if(!slot) slot = dst.slot;
     if(slot && slot->sts.inrange(0))
     {
-#ifndef STANDALONE
         if(!slot->loaded) slot->load();
         int xs = slot->sts[0].t->xs, ys = slot->sts[0].t->ys;
         if((dst.rotation&5)==1) swap(xs, ys);
         dst.offset.x %= xs; if(dst.offset.x < 0) dst.offset.x += xs;
         dst.offset.y %= ys; if(dst.offset.y < 0) dst.offset.y += ys;
-#else
-        dst.offset.max(0);
-#endif
     }
     else dst.offset.max(0);
 }
@@ -2232,7 +2226,6 @@ void decaldepth(float *depth, float *fade)
 }
 COMMAND(decaldepth, "ff");
 
-#ifndef STANDALONE
 static void addglow(ImageData &c, ImageData &g, const vec &glowcolor)
 {
     if(g.bpp < 3)
@@ -2279,7 +2272,6 @@ static void collapsespec(ImageData &s)
     else readwritetex(d, s, { dst[0] = src[0]; });
     s.replace(d);
 }
-#endif
 
 int Slot::findtextype(int type, int last) const
 {
@@ -2307,7 +2299,6 @@ int DecalSlot::cancombine(int type) const
     }
 }
 
-#ifndef STANDALONE
 static void addname(vector<char> &key, Slot &slot, Slot::Tex &t, bool combined = false, const char *prefix = NULL)
 {
     if(combined) key.add('&');
@@ -2395,60 +2386,50 @@ void Slot::load()
     }
     loaded = true;
 }
-#endif
 
 MatSlot &lookupmaterialslot(int index, bool load)
 {
     MatSlot &s = materialslots[index];
-#ifndef STANDALONE
     if(load && !s.linked)
     {
         if(!s.loaded) s.load();
         linkvslotshader(s);
         s.linked = true;
     }
-#endif
     return s;
 }
 
 Slot &lookupslot(int index, bool load)
 {
     Slot &s = slots.inrange(index) ? *slots[index] : (slots.inrange(DEFAULT_GEOM) ? *slots[DEFAULT_GEOM] : dummyslot);
-#ifndef STANDALONE
     if(!s.loaded && load) s.load();
-#endif
     return s;
 }
 
 VSlot &lookupvslot(int index, bool load)
 {
     VSlot &s = vslots.inrange(index) && vslots[index]->slot ? *vslots[index] : (slots.inrange(DEFAULT_GEOM) && slots[DEFAULT_GEOM]->variants ? *slots[DEFAULT_GEOM]->variants : dummyvslot);
-#ifndef STANDALONE
     if(load && !s.linked)
     {
         if(!s.slot->loaded) s.slot->load();
         linkvslotshader(s);
         s.linked = true;
     }
-#endif
     return s;
 }
 
 DecalSlot &lookupdecalslot(int index, bool load)
 {
     DecalSlot &s = decalslots.inrange(index) ? *decalslots[index] : dummydecalslot;
-#ifndef STANDALONE
     if(load && !s.linked)
     {
         if(!s.loaded) s.load();
         linkvslotshader(s);
         s.linked = true;
     }
-#endif
     return s;
 }
 
-#ifndef STANDALONE
 void linkslotshaders()
 {
     loopv(slots) if(slots[i]->loaded) linkslotshader(*slots[i]);
@@ -3573,4 +3554,3 @@ COMMAND(mergenormalmaps, "ss");
 COMMAND(normalizenormalmap, "ss");
 COMMAND(removealphachannel, "ss");
 
-#endif

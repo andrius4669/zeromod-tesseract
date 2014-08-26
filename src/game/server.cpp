@@ -232,6 +232,7 @@ namespace server
         void *authchallenge;
         int authkickvictim;
         char *authkickreason;
+
         char *disc_reason;
         bool chatmute, specmute, editmute, spy, invpriv;
         int lastchat, lastedit;
@@ -3198,14 +3199,19 @@ namespace server
             case N_TEXT:
             {
                 getstring(text, p);
-                char *cmd = z_servcmd_check(text);
-                if(cmd) { z_servcmd_parse(sender, cmd); break; }
+                char *tp = text;
+                if(z_servcmd_check(tp)) { z_servcmd_parse(sender, tp); break; }
                 if(!allowmsg(ci, cq, type)) break;
                 filtertext(text, text);
+                if(isdedicatedserver() && cq)
+                {
+                    if(cq->state.aitype==AI_NONE) logoutf("chat: %s (%d): %s", cq->name, cq->clientnum, tp);
+                    else logoutf("chat: %s [%d:%d]: %s", cq->name, cq->ownernum, cq->clientnum, tp);
+                }
+                if(cq && ci->spy) { sendservmsgf("\fs\f1[\f4spy\f1]\fr %s: \f0%s", cq->name, tp); break; }
                 QUEUE_AI;
                 QUEUE_INT(type);
-                QUEUE_STR(text);
-                if(isdedicatedserver() && cq) logoutf("chat: %s (%d): %s", cq->name, cq->clientnum, text);
+                QUEUE_STR(tp);
                 break;
             }
 
@@ -3213,7 +3219,7 @@ namespace server
             {
                 getstring(text, p);
                 if(!ci || !cq || (ci->state.state==CS_SPECTATOR && !ci->local && !ci->privilege) || !m_teammode || !validteam(cq->team)) break;
-                if(!allowmsg(ci, cq, type)) break;
+                if(ci->spy || !allowmsg(ci, cq, type)) break;
                 filtertext(text, text);
                 loopv(clients)
                 {
@@ -3221,7 +3227,11 @@ namespace server
                     if(t==cq || t->state.state==CS_SPECTATOR || t->state.aitype != AI_NONE || cq->team != t->team) continue;
                     sendf(t->clientnum, 1, "riis", N_SAYTEAM, cq->clientnum, text);
                 }
-                if(isdedicatedserver() && cq) logoutf("chat: %s (%d) <%s>: %s", cq->name, cq->clientnum, teamnames[cq->team], text);
+                if(isdedicatedserver() && cq)
+                {
+                    if(cq->state.aitype==AI_NONE) logoutf("chat: %s (%d) <%s>: %s", cq->name, cq->clientnum, teamnames[cq->team], text);
+                    else logoutf("chat: %s [%d:%d] <%s>: %s", cq->name, cq->ownernum, cq->clientnum, teamnames[cq->team], text);
+                }
                 break;
             }
 
@@ -3233,6 +3243,7 @@ namespace server
                 if(!text[0]) copystring(text, "unnamed");
                 if(isdedicatedserver()) logoutf("rename: %s (%d) is now known as %s", ci->name, ci->clientnum, text);
                 copystring(ci->name, text);
+                if(ci->spy) break;
                 QUEUE_INT(type);
                 QUEUE_STR(ci->name);
                 break;
@@ -3241,6 +3252,7 @@ namespace server
             case N_SWITCHMODEL:
             {
                 ci->playermodel = getint(p);
+                if(ci->spy) break;
                 QUEUE_MSG;
                 break;
             }
@@ -3248,6 +3260,7 @@ namespace server
             case N_SWITCHCOLOR:
             {
                 ci->playercolor = getint(p);
+                if(ci->spy) break;
                 QUEUE_MSG;
                 break;
             }
@@ -3261,7 +3274,7 @@ namespace server
                     if(ci->state.state==CS_ALIVE) suicide(ci);
                     ci->team = team;
                     aiman::changeteam(ci);
-                    sendf(-1, 1, "riiii", N_SETTEAM, sender, ci->team, ci->state.state==CS_SPECTATOR ? -1 : 0);
+                    sendf(ci->spy ? sender : -1, 1, "riiii", N_SETTEAM, sender, ci->team, ci->state.state==CS_SPECTATOR ? -1 : 0);
                 }
                 break;
             }
@@ -3343,6 +3356,7 @@ namespace server
                 {
                     ci->ping = ping;
                     loopv(ci->bots) ci->bots[i]->ping = ping;
+                    if(ci->spy) break;
                 }
                 QUEUE_MSG;
                 break;
@@ -3397,6 +3411,7 @@ namespace server
                 if(!ci->privilege && !ci->local && (spectator!=sender || (ci->state.state==CS_SPECTATOR && (mastermode>=MM_LOCKED || ci->specmute)))) break;
                 clientinfo *spinfo = (clientinfo *)getclientinfo(spectator); // no bots
                 if(!spinfo || !spinfo->connected || (spinfo->state.state==CS_SPECTATOR ? val : !val)) break;
+                if(spinfo->spy) break;
 
                 if(spinfo->state.state!=CS_SPECTATOR && val) forcespectator(spinfo);
                 else if(spinfo->state.state==CS_SPECTATOR && !val) unspectate(spinfo);
@@ -3411,6 +3426,7 @@ namespace server
                 if(!ci->privilege && !ci->local) break;
                 clientinfo *wi = getinfo(who);
                 if(!m_teammode || !validteam(team) || !wi || !wi->connected || wi->team == team) break;
+                if(wi->spy) break;
                 if(!smode || smode->canchangeteam(wi, wi->team, team))
                 {
                     if(wi->state.state==CS_ALIVE) suicide(wi);
@@ -3472,7 +3488,8 @@ namespace server
                 else if(ci->getmap) sendf(sender, 1, "ris", N_SERVMSG, "already sending map");
                 else
                 {
-                    sendservmsgf("[%s is getting the map]", colorname(ci));
+                    if(ci->spy) sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("[%s is getting the map]", colorname(ci)));
+                    else sendservmsgf("[%s is getting the map]", colorname(ci));
                     if((ci->getmap = sendfile(sender, 2, mapdata, "ri", N_SENDMAP)))
                         ci->getmap->freeCallback = freegetmap;
                     ci->needclipboard = totalmillis ? totalmillis : 1;
@@ -3583,7 +3600,7 @@ namespace server
             {
                 int val = getint(p);
                 if(ci->privilege < (restrictpausegame ? PRIV_ADMIN : PRIV_MASTER) && !ci->local) break;
-                pausegame(val > 0, ci);
+                pausegame(val > 0, ci->spy ? NULL : ci);
                 break;
             }
 
@@ -3591,7 +3608,7 @@ namespace server
             {
                 int val = getint(p);
                 if(ci->privilege < (restrictgamespeed ? PRIV_ADMIN : PRIV_MASTER) && !ci->local) break;
-                changegamespeed(val, !ci->spy ? ci : NULL);
+                changegamespeed(val, ci->spy ? NULL : ci);
                 break;
             }
 
@@ -3648,7 +3665,7 @@ namespace server
             case N_REDO:
             {
                 int unpacklen = getint(p), packlen = getint(p);
-                if(!ci || ci->state.state == CS_SPECTATOR || !allowmsg(ci, ci, type) || packlen <= 0 || packlen > (1<<16) || unpacklen <= 0)
+                if(!ci || ci->state.state==CS_SPECTATOR || !allowmsg(ci, ci, type) || packlen <= 0 || packlen > (1<<16) || unpacklen <= 0)
                 {
                     if(packlen > 0) p.subbuf(packlen);
                     break;

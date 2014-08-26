@@ -154,23 +154,6 @@ SERVER_OBJS= \
 	standalone/game/entities.o \
 	standalone/game/server.o
 
-ifneq (,$(OCTASERV))
-SERVER_OBJS+= \
-	standalone/engine/shader.cpp \
-	standalone/engine/material.o \
-	standalone/engine/blend.o \
-	standalone/engine/light.o \
-	standalone/engine/normal.o \
-	standalone/engine/octa.o \
-	standalone/engine/octaedit.o \
-	standalone/engine/octarender.o \
-	standalone/engine/physics.o \
-	standalone/engine/renderlights.o \
-	standalone/engine/texture.o \
-	standalone/engine/world.o
-SERVER_INCLUDES+= -DOCTASERV
-endif
-
 SERVER_PCH= standalone/shared/cube.h.gch standalone/engine/engine.h.gch standalone/game/game.h.gch
 
 MASTER_OBJS= \
@@ -507,7 +490,7 @@ game/server.o: game/z_sendmap.h game/z_servcmd.h game/z_gbans_override.h
 game/server.o: game/z_ms_gameserver_override.h game/z_geoip.h
 game/server.o: game/z_geoipserver.h game/z_msgfilter.h game/extinfo.h
 game/server.o: game/aiman.h game/z_genericservercommands.h game/z_mutes.h
-game/server.o: game/z_loadmap.h game/z_savemap.h game/z_rename.h
+game/server.o: game/z_loadmap.h game/z_savemap.h game/z_rename.h game/z_spy.h
 game/waypoint.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/waypoint.o: shared/ents.h shared/command.h shared/glexts.h
 game/waypoint.o: shared/glemu.h shared/iengine.h shared/igame.h game/ai.h
@@ -562,6 +545,7 @@ standalone/game/server.o: game/z_geoipserver.h game/z_msgfilter.h
 standalone/game/server.o: game/extinfo.h game/aiman.h
 standalone/game/server.o: game/z_genericservercommands.h game/z_mutes.h
 standalone/game/server.o: game/z_loadmap.h game/z_savemap.h game/z_rename.h
+standalone/game/server.o: game/z_spy.h
 standalone/engine/master.o: shared/cube.h shared/tools.h shared/geom.h
 standalone/engine/master.o: shared/ents.h shared/command.h shared/iengine.h
 standalone/engine/master.o: shared/igame.h

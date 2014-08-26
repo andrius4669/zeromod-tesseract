@@ -2,7 +2,6 @@
 
 #include "engine.h"
 
-#ifndef STANDALONE
 struct vboinfo
 {
     int uses;
@@ -612,7 +611,6 @@ struct vacollect : verthash
         return verts.empty() && matsurfs.empty() && skyindices.empty() && grasstris.empty() && mapmodels.empty() && decals.empty();
     }
 } vc;
-#endif
 
 int recalcprogress = 0;
 #define progress(s)     if((recalcprogress++&0xFFF)==0) renderprogress(recalcprogress/(float)allocnodes, s);
@@ -637,7 +635,6 @@ void reduceslope(ivec &n)
     while(!((n.x|n.y|n.z)&1)) n.shr(1);
 }
 
-#ifndef STANDALONE
 // [rotation][orient]
 extern const vec orientation_tangent[6][6] =
 {
@@ -804,7 +801,6 @@ static inline void calctexgen(VSlot &vslot, int orient, vec4 &sgen, vec4 &tgen)
         case 5: sgen.x = sk;  tgen.y = tk;  break;
     }
 }
-#endif
 
 ushort encodenormal(const vec &n)
 {
@@ -852,7 +848,6 @@ void guessnormals(const vec *pos, int numverts, vec *normals)
     normals[3] = n2;
 }
 
-#ifndef STANDALONE
 void addcubeverts(VSlot &vslot, int orient, int size, vec *pos, int convex, ushort texture, vertinfo *vinfo, int numverts, int tj = -1, ushort envmap = EMID_NONE, int grassy = 0, bool alpha = false, int layer = LAYER_TOP)
 {
     vec4 sgen, tgen;
@@ -915,7 +910,6 @@ void addcubeverts(VSlot &vslot, int orient, int size, vec *pos, int convex, usho
         }
     }
 }
-#endif
 
 struct edgegroup
 {
@@ -1067,7 +1061,6 @@ void gencubeedges(cube *c = worldroot, const ivec &co = ivec(0, 0, 0), int size 
     --neighbourdepth;
 }
 
-#ifndef STANDALONE
 void gencubeverts(cube &c, const ivec &co, int size, int csi)
 {
     if(!(c.visible&0xC0)) return;
@@ -1589,7 +1582,6 @@ int updateva(cube *c, const ivec &co, int size, int csi)
 
     return ccount;
 }
-#endif
 
 void addtjoint(const edgegroup &g, const cubeedge &e, int offset)
 {
@@ -1664,7 +1656,6 @@ void findtjoints()
     edgegroups.clear();
 }
 
-#ifndef STANDALONE
 void octarender()                               // creates va s for all leaf cubes that don't already have them
 {
     int csi = 0;
@@ -1746,4 +1737,3 @@ void recalc()
 
 COMMAND(recalc, "");
 
-#endif

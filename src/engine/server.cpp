@@ -182,7 +182,7 @@ void cleanupserver()
 
 VARF(maxclients, 0, DEFAULTCLIENTS, MAXCLIENTS, { if(!maxclients) maxclients = DEFAULTCLIENTS; });
 VARF(maxdupclients, 0, 0, MAXCLIENTS, { if(serverhost) serverhost->duplicatePeers = maxdupclients ? maxdupclients : MAXCLIENTS; });
-VAR(maxpeers, 0, 0, MAXCLIENTS);
+VAR(maxslots, 0, 0, MAXCLIENTS);
 
 void process(ENetPacket *packet, int sender, int chan);
 //void disconnect_client(int n, int reason);
@@ -520,6 +520,8 @@ void flushmasterinput()
 #endif
 
 static ENetAddress serverinfoaddress;
+
+uint getserverinfoip() { return serverinfoaddress.host; }
 
 void sendserverinforeply(ucharbuf &p)
 {
@@ -1108,7 +1110,7 @@ bool setuplistenserver(bool dedicated)
         if(enet_address_set_host(&address, serverip)<0) conoutf(CON_WARN, "WARNING: server ip not resolved");
         else serveraddress.host = address.host;
     }
-    serverhost = enet_host_create(&address, min(max(maxclients + server::reserveclients(), maxpeers), MAXCLIENTS), server::numchannels(), 0, serveruprate);
+    serverhost = enet_host_create(&address, min(max(maxclients + server::reserveclients(), maxslots), MAXCLIENTS), server::numchannels(), 0, serveruprate);
     if(!serverhost) return servererror(dedicated, "could not create server host");
     serverhost->duplicatePeers = maxdupclients ? maxdupclients : MAXCLIENTS;
     serverhost->intercept = serverinfointercept;

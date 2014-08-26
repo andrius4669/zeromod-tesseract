@@ -1,6 +1,5 @@
 #include "engine.h"
 
-#ifndef STANDALONE
 int gw = -1, gh = -1, bloomw = -1, bloomh = -1, lasthdraccum = 0;
 GLuint gfbo = 0, gdepthtex = 0, gcolortex = 0, gnormaltex = 0, gglowtex = 0, gdepthrb = 0, gstencilrb = 0;
 bool gdepthinit = false;
@@ -229,7 +228,6 @@ void cleanupao()
     clearaoshaders();
     clearbilateralshaders();
 }
-#endif
 
 VARFP(ao, 0, 1, 1, { cleanupao(); cleardeferredlightshaders(); });
 FVARR(aoradius, 0, 5, 256);
@@ -256,7 +254,6 @@ VARFP(aotaps, 1, 5, 12, cleanupao());
 VARF(aoderivnormal, 0, 0, 1, cleanupao());
 VAR(debugao, 0, 0, 1);
 
-#ifndef STANDALONE
 void initao()
 {
     aodepthformat = aofloatdepth && hasTRG && hasTF ? aofloatdepth : 0;
@@ -1360,7 +1357,7 @@ void viewrefract()
 #define RH_MAXSPLITS 4
 #define RH_MAXGRID 64
 
-GLuint rhtex[8] = { 0, 0, 0, 0, 0, 0, 0, 0 }, rhfbo = 0;
+GLuint rhtex[8] = { 0, 0, 0, 0, 0, 0, 0, 0 }, rhrb[4] = { 0, 0, 0, 0 }, rhfbo = 0;
 uint rhclearmasks[2][RH_MAXSPLITS][(RH_MAXGRID+2+31)/32];
 GLuint rsmdepthtex = 0, rsmcolortex = 0, rsmnormaltex = 0, rsmfbo = 0;
 
@@ -1414,9 +1411,11 @@ void setupradiancehints()
 
     if(rhrect) loopi(4)
     {
-        if(!rhtex[4+i]) glGenTextures(1, &rhtex[4+i]);
-        createtexture(rhtex[4+i], (rhgrid + 2*rhborder)*(rhgrid + 2*rhborder), (rhgrid + 2*rhborder)*rhsplits, NULL, 3, 0, rhformat, GL_TEXTURE_RECTANGLE);
-        glFramebufferTexture2D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_RECTANGLE, rhtex[4+i], 0);
+        if(!rhrb[i]) glGenRenderbuffers_(1, &rhrb[i]);
+        glBindRenderbuffer_(GL_RENDERBUFFER, rhrb[i]);
+        glRenderbufferStorage_(GL_RENDERBUFFER, rhformat, (rhgrid + 2*rhborder)*(rhgrid + 2*rhborder), (rhgrid + 2*rhborder)*rhsplits);
+        glBindRenderbuffer_(GL_RENDERBUFFER, 0);
+        glFramebufferRenderbuffer_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_RENDERBUFFER, rhrb[i]);
     }
     else loopi(4) glFramebufferTexture3D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_3D, rhtex[i], 0, 0);
 
@@ -1461,6 +1460,7 @@ void cleanupradiancehints()
     clearradiancehintscache();
 
     loopi(8) if(rhtex[i]) { glDeleteTextures(1, &rhtex[i]); rhtex[i] = 0; }
+    loopi(4) if(rhrb[i]) { glDeleteRenderbuffers_(1, &rhrb[i]); rhrb[i] = 0; }
     if(rhfbo) { glDeleteFramebuffers_(1, &rhfbo); rhfbo = 0; }
     if(rsmdepthtex) { glDeleteTextures(1, &rsmdepthtex); rsmdepthtex = 0; }
     if(rsmcolortex) { glDeleteTextures(1, &rsmcolortex); rsmcolortex = 0; }
@@ -1480,11 +1480,9 @@ FVARF(rsmpradiustweak, 1e-3f, 1, 1e3f, clearradiancehintscache());
 FVARF(rhpradiustweak, 1e-3f, 1, 1e3f, clearradiancehintscache());
 FVARF(rsmdepthrange, 0, 1024, 1e6f, clearradiancehintscache());
 FVARF(rsmdepthmargin, 0, 0.1f, 1e3f, clearradiancehintscache());
-#endif
 VARFP(rhprec, 0, 0, 1, cleanupradiancehints());
 VARFP(rsmprec, 0, 0, 3, cleanupradiancehints());
 VARFP(rsmdepthprec, 0, 0, 2, cleanupradiancehints());
-#ifndef STANDALONE
 FVAR(rhnudge, 0, 0.5f, 4);
 FVARF(rhworldbias, 0, 0.5f, 10, clearradiancehintscache());
 FVARF(rhsplitweight, 0.20f, 0.6f, 0.95f, clearradiancehintscache());
@@ -1494,7 +1492,6 @@ VAR(rhclipgrid, 0, 1, 1);
 VARF(rhcache, 0, 1, 1, cleanupradiancehints());
 VARF(rhforce, 0, 0, 1, cleanupradiancehints());
 VAR(rsmcull, 0, 1, 1);
-#endif
 VARFP(rhtaps, 0, 20, 32, cleanupradiancehints());
 VAR(rhdyntex, 0, 0, 1);
 VAR(rhdynmm, 0, 0, 1);
@@ -1503,7 +1500,6 @@ FVARFR(giscale, 0, 1.5f, 1e3f, { cleardeferredlightshaders(); if(!giscale) clean
 FVARR(giaoscale, 0, 3, 1e3f);
 VARFP(gi, 0, 1, 1, { cleardeferredlightshaders(); cleanupradiancehints(); });
 
-#ifndef STANDALONE
 VAR(debugrsm, 0, 0, 2);
 void viewrsm()
 {
@@ -1992,9 +1988,6 @@ void cascadedshadowmap::getprojmatrix()
         split.proj.identity();
         split.proj.settranslation(2*split.offset.x/sm.size - 1, 2*split.offset.y/sm.size - 1, 2*split.offset.z - 1);
         split.proj.setscale(2*split.scale.x/sm.size, 2*split.scale.y/sm.size, 2*split.scale.z);
-
-        const float bias = (smfilter > 2 ? csmbias2 : csmbias) * (-512.0f / sm.size) * (split.farplane - split.nearplane) / (splits[0].farplane - splits[0].nearplane);
-        split.offset.add(vec(sm.x, sm.y, bias));
     }
 }
 
@@ -2015,21 +2008,23 @@ void cascadedshadowmap::gencullplanes()
 
 void cascadedshadowmap::bindparams()
 {
-    static GlobalShaderParam splitcenter("splitcenter"), splitbounds("splitbounds"), splitscale("splitscale"), splitoffset("splitoffset");
-    vec *splitcenterv = splitcenter.reserve<vec>(csmsplits),
-        *splitboundsv = splitbounds.reserve<vec>(csmsplits),
-        *splitscalev = splitscale.reserve<vec>(csmsplits),
-        *splitoffsetv = splitoffset.reserve<vec>(csmsplits);
+    GLOBALPARAM(csmmatrix, matrix3(model));
+
+    static GlobalShaderParam csmtc("csmtc"), csmoffset("csmoffset");
+    vec4 *csmtcv = csmtc.reserve<vec4>(csmsplits);
+    vec *csmoffsetv = csmoffset.reserve<vec>(csmsplits);
     loopi(csmsplits)
-    {
+    {   
         cascadedshadowmap::splitinfo &split = splits[i];
         if(split.idx < 0) continue;
-        splitcenterv[i] = split.center;
-        splitboundsv[i] = split.bounds;
-        splitscalev[i] = split.scale;
-        splitoffsetv[i] = split.offset;
+        const shadowmapinfo &sm = shadowmaps[split.idx];
+
+        csmtcv[i] = vec4(vec2(split.center).mul(-split.scale.x), split.scale.x, split.bounds.x*split.scale.x);
+
+        const float bias = (smfilter > 2 ? csmbias2 : csmbias) * (-512.0f / sm.size) * (split.farplane - split.nearplane) / (splits[0].farplane - splits[0].nearplane);
+        csmoffsetv[i] = vec(sm.x, sm.y, 0.5f + bias).add2(0.5f*sm.size);
     }
-    GLOBALPARAM(csmmatrix, matrix3(model));
+    GLOBALPARAMF(csmz, splits[0].center.z*-splits[0].scale.z, splits[0].scale.z);
 }
 
 cascadedshadowmap csm;
@@ -2277,19 +2272,17 @@ void radiancehints::setup()
 
 void radiancehints::bindparams()
 {
-    static GlobalShaderParam rhbb("rhbb"), rhscale("rhscale"), rhoffset("rhoffset");
-    vec4 *rhbbv = rhbb.reserve<vec4>(rhsplits);
-    vec *rhscalev = rhscale.reserve<vec>(rhsplits),
-        *rhoffsetv = rhoffset.reserve<vec>(rhsplits);
+    float step = 2*splits[0].bounds/rhgrid;
+    GLOBALPARAMF(rhnudge, rhnudge*step);
+
+    static GlobalShaderParam rhtc("rhtc");
+    vec4 *rhtcv = rhtc.reserve<vec4>(rhsplits);
     loopi(rhsplits)
     {
         splitinfo &split = splits[i];
-        rhbbv[i] = vec4(split.center, split.bounds*(1 + rhborder*2*0.5f/rhgrid));
-        rhscalev[i] = split.scale;
-        rhoffsetv[i] = split.offset;
+        rhtcv[i] = vec4(vec(split.center).mul(-split.scale.x), split.scale.x);//split.bounds*(1 + rhborder*2*0.5f/rhgrid));
     }
-    float step = 2*splits[0].bounds/rhgrid;
-    GLOBALPARAMF(rhnudge, rhnudge*step);
+    GLOBALPARAMF(rhbounds, 0.5f*(rhgrid + rhborder)/float(rhgrid + 2*rhborder));
 }
 
 bool useradiancehints()
@@ -2769,7 +2762,7 @@ static inline void setlightparams(int i, const lightinfo &l)
     {
         shadowmapinfo &sm = shadowmaps[l.shadowmap];
         float smnearclip = SQRT3 / l.radius, smfarclip = SQRT3,
-              bias = (smfilter > 2 ? smbias2 : smbias) * (smcullside ? 1 : -1) * smnearclip * (1024.0f / sm.size);
+              bias = (smfilter > 2 || smsize > 12 ? smbias2 : smbias) * (smcullside ? 1 : -1) * smnearclip * (1024.0f / sm.size);
         int border = smfilter > 2 ? smborder2 : smborder;
         if(l.spot > 0)
         {
@@ -3813,7 +3806,7 @@ void radiancehints::renderslices()
     gle::deftexcoord0(3);
 
     memset(rhclearmasks[0], 0xFF, sizeof(rhclearmasks[0]));
-
+    int cx = -1, cy = -1;
     loopirev(rhsplits)
     {
         splitinfo &split = splits[i];
@@ -3924,24 +3917,21 @@ void radiancehints::renderslices()
 
                 rhclearmasks[0][i][j/32] &= ~(1 << (j%32));
             }
-            else
-            {
-            noborder:
-                if(rhborder) glClear(GL_COLOR_BUFFER_BIT);
-            }
 
-            if(j < rhborder || j >= rhgrid + rhborder) continue;
+        noborder:
+            if(j < rhborder || j >= rhgrid + rhborder)
+            {
+            skipped:
+                if(rhclearmasks[0][i][j/32] & (1 << (j%32)) && (!rhrect || (cx < 0 && !(rhclearmasks[1][i][j/32] & (1 << (j%32)))))) { glClear(GL_COLOR_BUFFER_BIT); cx = sx; cy = sy; }
+                continue;
+            }
 
             if(rhclipgrid)
             {
-                if(z < cmin.z || z > cmax.z)
-                {
-                    if(!rhborder) glClear(GL_COLOR_BUFFER_BIT);
-                    continue;
-                }
+                if(z < cmin.z || z > cmax.z) goto skipped;
                 if(x1 < cmin.x || x2 > cmax.x || y1 < cmin.y || y2 > cmax.y)
                 {
-                    if(!rhborder) glClear(GL_COLOR_BUFFER_BIT);
+                    if(rhclearmasks[0][i][j/32] & (1 << (j%32))) glClear(GL_COLOR_BUFFER_BIT);
                     tx1 = max(x1, cmin.x);
                     tx2 = min(x2, cmax.x);
                     ty1 = max(y1, cmin.y);
@@ -4040,7 +4030,11 @@ void radiancehints::renderslices()
             glBindTexture(GL_TEXTURE_3D, rhtex[k]);
             loopj(sh)
             {
-                if(rhclearmasks[0][i][j/32] & rhclearmasks[1][i][j/32] & (1 << (j%32))) continue;
+                if(rhclearmasks[0][i][j/32] & (1 << (j%32)))
+                {
+                    if(!(rhclearmasks[1][i][j/32] & (1 << (j%32)))) glCopyTexSubImage3D_(GL_TEXTURE_3D, 0, 0, 0, sy+j, cx, cy, sw, sh);
+                    continue;
+                }
                 glCopyTexSubImage3D_(GL_TEXTURE_3D, 0, 0, 0, sy+j, j*sw, sy, sw, sh);
             }
         }
@@ -4888,5 +4882,4 @@ void cleanuplights()
     cleanuplightsphere();
     cleanupaa();
 }
-#endif
 

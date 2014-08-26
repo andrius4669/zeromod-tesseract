@@ -82,9 +82,7 @@ struct occludequery
     int fragments;
 };
 
-#ifndef STANDALONE
 struct vtxarray;
-#endif
 
 struct octaentities
 {
@@ -117,7 +115,6 @@ enum
     MERGE_USE    = 1<<2
 };
 
-#ifndef STANDALONE
 struct vtxarray
 {
     vtxarray *parent;
@@ -148,7 +145,6 @@ struct vtxarray
     int hasmerges, mergelevel;
     int shadowmask;
 };
-#endif
 
 struct cube;
 
@@ -178,11 +174,7 @@ struct tjoint
 
 struct cubeext
 {
-#ifndef STANDALONE
     vtxarray *va;            // vertex array for children, or NULL
-#else
-    void *va;
-#endif
     octaentities *ents;      // map entities inside cube
     surfaceinfo surfaces[6]; // render info for each surface
     int tjoints;             // linked list of t-joints

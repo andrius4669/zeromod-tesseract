@@ -49,17 +49,13 @@ extern float sunlightyaw, sunlightpitch;
 extern vec sunlightdir;
 extern int fullbright, fullbrightlevel;
 
-#ifndef STANDALONE
 extern void clearlights();
 extern void initlights();
 extern void clearlightcache(int id = -1);
-#endif
 extern void brightencube(cube &c);
 extern void setsurfaces(cube &c, const surfaceinfo *surfs, const vertinfo *verts, int numverts);
 extern void setsurface(cube &c, int orient, const surfaceinfo &surf, const vertinfo *verts, int numverts);
-#ifndef STANDALONE
 extern void previewblends(const ivec &bo, const ivec &bs);
-#endif
 
 extern void calcnormals(bool lerptjoints = false);
 extern void clearnormals();
@@ -67,7 +63,6 @@ extern void resetsmoothgroups();
 extern int smoothangle(int id, int angle);
 extern void findnormal(const vec &key, int smooth, const vec &surface, vec &v);
 
-#ifndef STANDALONE
 #define CHECK_CALCLIGHT_PROGRESS_LOCKED(exit, show_calclight_progress, before, after) \
     if(check_calclight_progress) \
     { \
@@ -88,5 +83,4 @@ extern volatile bool check_calclight_progress;
 extern void check_calclight_canceled();
 
 extern const vector<int> &checklightcache(int x, int y);
-#endif
 

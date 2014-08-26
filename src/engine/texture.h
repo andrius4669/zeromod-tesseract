@@ -1,4 +1,3 @@
-#ifndef STANDALONE
 extern int renderpath;
 
 enum { R_GLSLANG = 0 };
@@ -73,7 +72,6 @@ struct LocalShaderParamState : ShaderParamBinding
 {
     const char *name;
 };
-#endif
 
 struct SlotShaderParam
 {
@@ -82,7 +80,6 @@ struct SlotShaderParam
     float val[4];
 };
 
-#ifndef STANDALONE
 struct SlotShaderParamState : LocalShaderParamState
 {
     float val[4];
@@ -113,12 +110,10 @@ enum
 };
 
 #define MAXVARIANTROWS 32
-#endif
 
 struct Slot;
 struct VSlot;
 
-#ifndef STANDALONE
 struct UniformLoc
 {
     const char *name, *blockname;
@@ -588,7 +583,6 @@ struct Texture
 
 #define SETSWIZZLE(name, tex) SETVARIANT(name, (tex) ? (tex)->swizzle() : -1, 0)
 #define SETVARIANTSWIZZLE(name, tex, row) SETVARIANT(name, ((row) >= 0 ? 1 : 0) + ((tex) ? (tex)->swizzle() : -1), row)
-#endif
 
 enum
 {
@@ -668,9 +662,7 @@ struct VSlot
         linked = false;
     }
 
-#ifndef STANDALONE
     bool isdynamic() const;
-#endif
 };
 
 struct Slot
@@ -680,32 +672,22 @@ struct Slot
     struct Tex
     {
         int type;
-#ifndef STANDALONE
         Texture *t;
-#endif
         string name;
         int combined;
 
-#ifndef STANDALONE
         Tex() : t(NULL), combined(-1) {}
-#else
-        Tex(): combined(-1) {}
-#endif
     };
 
     int index, smooth;
     vector<Tex> sts;
-#ifndef STANDALONE
     Shader *shader;
-#endif
     vector<SlotShaderParam> params;
     VSlot *variants;
     bool loaded;
     uint texmask;
     char *grass;
-#ifndef STANDALONE
     Texture *grasstex, *thumbnail;
-#endif
 
     Slot(int index = -1) : index(index), variants(NULL), grass(NULL) { reset(); }
     virtual ~Slot() {}
@@ -720,43 +702,33 @@ struct Slot
 
     int findtextype(int type, int last = -1) const;
 
-#ifndef STANDALONE
     void load(int index, Slot::Tex &t);
     void load();
 
     Texture *loadthumbnail();
-#endif
 
     void reset()
     {
         smooth = -1;
         sts.shrink(0);
-#ifndef STANDALONE
         shader = NULL;
-#endif
         params.shrink(0);
         loaded = false;
         texmask = 0;
         DELETEA(grass);
-#ifndef STANDALONE
         grasstex = NULL;
         thumbnail = NULL;
-#endif
     }
 
     void cleanup()
     {
         loaded = false;
-#ifndef STANDALONE
         grasstex = NULL;
         thumbnail = NULL;
-#endif
         loopv(sts)
         {
             Tex &t = sts[i];
-#ifndef STANDALONE
             t.t = NULL;
-#endif
             t.combined = -1;
         }
     }
@@ -773,12 +745,10 @@ inline void VSlot::addvariant(Slot *slot)
     }
 }
 
-#ifndef STANDALONE
 inline bool VSlot::isdynamic() const
 {
     return !scroll.iszero() || slot->shader->isdynamic();
 }
-#endif
 
 struct MatSlot : Slot, VSlot
 {
@@ -833,7 +803,6 @@ struct DecalSlot : Slot, VSlot
     }
 };
 
-#ifndef STANDALONE
 struct cubemapside
 {
     GLenum target;
@@ -854,9 +823,7 @@ extern void setslotshader(Slot &s);
 extern void linkslotshader(Slot &s, bool load = true);
 extern void linkvslotshader(VSlot &s, bool load = true);
 extern void linkslotshaders();
-#endif
 extern const char *getshaderparamname(const char *name, bool insert = true);
-#ifndef STANDALONE
 extern void setupshaders();
 extern void reloadshaders();
 extern void cleanupshaders();
@@ -870,7 +837,6 @@ extern void savepng(const char *filename, ImageData &image, bool flip = false);
 extern void savetga(const char *filename, ImageData &image, bool flip = false);
 extern bool loaddds(const char *filename, ImageData &image);
 extern bool loadimage(const char *filename, ImageData &image);
-#endif
 
 extern MatSlot &lookupmaterialslot(int slot, bool load = true);
 extern Slot &lookupslot(int slot, bool load = true);

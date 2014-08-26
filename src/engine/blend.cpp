@@ -114,7 +114,6 @@ struct BlendMapRoot : BlendMapNode
 
 static BlendMapRoot blendmap;
 
-#ifndef STANDALONE
 struct BlendMapCache
 {
     BlendMapRoot node;
@@ -319,7 +318,6 @@ void invertblendmap(int x, int y, int w, int h)
     if(max(x1, y1) >= bmsize || min(x2, y2) <= 0 || x1>=x2 || y1>=y2) return;
     invertblendmap(blendmap.type, blendmap, bmsize, x1, y1, x2, y2);
 }
-#endif
 
 static void optimizeblendmap(uchar &type, BlendMapNode &node)
 {
@@ -358,7 +356,6 @@ void optimizeblendmap()
 
 ICOMMAND(optimizeblendmap, "", (), optimizeblendmap());
 
-#ifndef STANDALONE
 VARF(blendpaintmode, 0, 0, 5,
 {
     if(!blendpaintmode) stoppaintblendmap();
@@ -435,7 +432,6 @@ void blitblendmap(uchar *src, int sx, int sy, int sw, int sh, int smode)
     if(max(sx, sy) >= bmsize || min(sx+sw, sy+sh) <= 0 || min(sw, sh) <= 0) return;
     blitblendmap(blendmap.type, blendmap, 0, 0, bmsize, src, sx, sy, sw, sh, smode);
 }
-#endif
 
 void resetblendmap()
 {
@@ -532,7 +528,6 @@ int calcblendlayer(int x1, int y1, int x2, int y2)
     return calcblendlayer(blendmap.type, blendmap, 0, 0, bmsize, ux1, uy1, ux2-ux1, uy2-uy1);
 }
 
-#ifndef STANDALONE
 void moveblendmap(uchar type, BlendMapNode &node, int size, int x, int y, int dx, int dy)
 {
     if(type == BM_BRANCH)
@@ -1094,7 +1089,6 @@ void renderblendbrush()
     if(!brush->tex) brush->gentex();
     renderblendbrush(brush->tex, x1, y1, x2 - x1, y2 - y1);
 }
-#endif
 
 bool loadblendmap(stream *f, uchar &type, BlendMapNode &node)
 {
