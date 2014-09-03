@@ -24,21 +24,23 @@ static void z_servcmd_mute(int argc, char **argv, int sender)
     else if(!strcmp(argv[0], "unmute")) { mutetype = 1; val = 0; }
     else if(!strcmp(argv[0], "editmute") || !strcmp(argv[0], "emute")) mutetype = 2;
     else if(!strcmp(argv[0], "editunmute") || !strcmp(argv[0], "eunmute")) { mutetype = 2; val = 0; }
+    else if(!strcmp(argv[0], "nmute") || !strcmp(argv[0], "namemute")) mutetype = 3;
+    else if(!strcmp(argv[0], "nunmute") || !strcmp(argv[0], "nameunmute")) { mutetype = 3; val = 0; }
 
     if(mutetype == 1)
     {
         if(ci)
         {
             ci->chatmute = val!=0;
-            sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you %s %s", ci->chatmute ? "muted" : "unmuted", colorname(ci)));
-            if(ci->state.aitype == AI_NONE) sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got %s", ci->chatmute ? "muted" : "unmuted"));
+            sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you %s %s", val ? "muted" : "unmuted", colorname(ci)));
+            if(ci->state.aitype == AI_NONE) sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got %s", val ? "muted" : "unmuted"));
         }
         else loopv(clients)
         {
             ci = clients[i];
             ci->chatmute = val!=0;
-            sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you %s %s", ci->chatmute ? "muted" : "unmuted", colorname(ci)));
-            if(ci->state.aitype == AI_NONE) sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got %s", ci->chatmute ? "muted" : "unmuted"));
+            sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you %s %s", val ? "muted" : "unmuted", colorname(ci)));
+            if(ci->state.aitype == AI_NONE) sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got %s", val ? "muted" : "unmuted"));
         }
     }
     else if(mutetype == 2)
@@ -48,8 +50,8 @@ static void z_servcmd_mute(int argc, char **argv, int sender)
             if(ci->state.aitype == AI_NONE)
             {
                 ci->editmute = val!=0;
-                sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you edit-%s %s", ci->chatmute ? "muted" : "unmuted", colorname(ci)));
-                sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got edit-%s", ci->editmute ? "muted" : "unmuted"));
+                sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you edit-%s %s", val ? "muted" : "unmuted", colorname(ci)));
+                sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got edit-%s", val ? "muted" : "unmuted"));
             }
         }
         else loopv(clients)
@@ -57,8 +59,28 @@ static void z_servcmd_mute(int argc, char **argv, int sender)
             ci = clients[i];
             if(ci->state.aitype != AI_NONE) continue;
             ci->editmute = val!=0;
-            sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you edit-%s %s", ci->editmute ? "muted" : "unmuted", colorname(ci)));
-            sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got edit-%s", ci->editmute ? "muted" : "unmuted"));
+            sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you edit-%s %s", val ? "muted" : "unmuted", colorname(ci)));
+            sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got edit-%s", val ? "muted" : "unmuted"));
+        }
+    }
+    else if(mutetype == 3)
+    {
+        if(ci)
+        {
+            if(ci->state.aitype == AI_NONE)
+            {
+                ci->namemute = val!=0;
+                sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you name-%s %s", val ? "muted" : "unmuted", colorname(ci)));
+                sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got name-%s", val ? "muted" : "unmuted"));
+            }
+        }
+        else
+        {
+            ci = clients[i];
+            if(ci->state.aitype != AI_NONE) continue;
+            ci->namemute = val!=0;
+            sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you name-%s %s", val ? "muted" : "unmuted", colorname(ci)));
+            sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got name-%s", val ? "muted" : "unmuted"));
         }
     }
 
@@ -73,6 +95,10 @@ SCOMMANDNA(editmute, PRIV_MASTER, z_servcmd_mute, 2);
 SCOMMANDNA(editunmute, PRIV_MASTER, z_servcmd_mute, 1);
 SCOMMANDNAH(emute, PRIV_MASTER, z_servcmd_mute, 2);
 SCOMMANDNAH(eunmute, PRIV_MASTER, z_servcmd_mute, 1);
+SCOMMANDNA(namemute, PRIV_AUTH, z_servcmd_mute, 2);
+SCOMMANDNA(nameunmute, PRIV_AUTH, z_servcmd_mute, 1);
+SCOMMANDNA(nmute, PRIV_AUTH, z_servcmd_mute, 2);
+SCOMMANDNA(nunmute, PRIV_AUTH, z_servcmd_mute, 1);
 
 bool z_autoeditmute = false;
 VARFN(autoeditmute, z_defaultautoeditmute, 0, 0, 1, { if(clients.empty()) z_autoeditmute = z_defaultautoeditmute!=0; });

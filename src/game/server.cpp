@@ -234,7 +234,7 @@ namespace server
         char *authkickreason;
 
         char *disc_reason;
-        bool chatmute, specmute, editmute, spy, invpriv;
+        bool chatmute, specmute, editmute, spy, invpriv, namemute;
         int lastchat, lastedit;
         geoipstate geoip;
         int nodamage;
@@ -352,7 +352,7 @@ namespace server
             cleanauth();
             geoip.cleanup();
             DELETEP(disc_reason);
-            chatmute = specmute = editmute = spy = invpriv = false;
+            chatmute = specmute = editmute = spy = invpriv = namemute = false;
             lastchat = lastedit = 0;
             nodamage = 0;
             mapchange();

@@ -1,6 +1,8 @@
 #ifndef Z_MSGFILTER_H
 #define Z_MSGFILTER_H
 
+#include "z_rename.h"
+
 // message checking for editmute and flood protection
 bool allowmsg(clientinfo *ci, clientinfo *cq, int type)
 {
@@ -48,6 +50,14 @@ bool allowmsg(clientinfo *ci, clientinfo *cq, int type)
                         break;
                 }
                 if(msg) sendf(ci->clientnum, 1, "ris", N_SERVMSG, msg);
+                return false;
+            }
+            return true;
+
+        case N_SWITCHNAME:
+            if(ci->namemute)
+            {
+                z_rename(ci, ci->name, false);
                 return false;
             }
             return true;
