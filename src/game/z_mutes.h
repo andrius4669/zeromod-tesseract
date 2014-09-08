@@ -74,7 +74,7 @@ static void z_servcmd_mute(int argc, char **argv, int sender)
                 sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got name-%s", val ? "muted" : "unmuted"));
             }
         }
-        else
+        else loopv(clients)
         {
             ci = clients[i];
             if(ci->state.aitype != AI_NONE) continue;
