@@ -6,16 +6,14 @@
 #include "z_geoipstate.h"
 #include "z_geoip.h"
 
-static void z_geoip_gencolors(char *cbuf)
+static void z_geoip_gencolors(char *cbuf, size_t len)
 {
-    size_t slen = strlen(geoip_color_scheme), len = min<size_t>(slen, 3);
-    for(size_t i = 0; i < len; i++)
-    {
-        cbuf[i] = geoip_color_scheme[i];
-        if(cbuf[i] < '0' || cbuf[i] > '9') cbuf[i] = '7';
-    }
-    for(size_t i = len; i < 3; i++) cbuf[i] = len > 0 ? cbuf[len-1] : '7';
+    size_t i = 0;
+    for(; geoip_color_scheme[i] && i < len; i++)
+        cbuf[i] = geoip_color_scheme[i] >= '0' && geoip_color_scheme[i] <= '9' ? geoip_color_scheme[i] : '7';
+    for(; i < len; i++) cbuf[i] = i>0 ? cbuf[i-1] : '7';
 }
+template<size_t N> static inline void z_geoip_gencolors(char (&s)[N]) { z_geoip_gencolors(s, N); }
 
 static void z_geoip_print(vector<char> &buf, clientinfo *ci, bool admin)
 {

@@ -262,11 +262,13 @@ struct ctfclientmode : clientmode
         if(f.team!=ci->team)
         {
             loopvj(flags) if(flags[j].owner==ci->clientnum) return;
+            if(!f.droptime) ci->state.stolen++;
             ownflag(i, ci->clientnum, lastmillis);
             sendf(-1, 1, "ri4", N_TAKEFLAG, ci->clientnum, i, ++f.version);
         }
         else if(f.droptime)
         {
+            ci->state.returned++;
             returnflag(i);
             sendf(-1, 1, "ri4", N_RETURNFLAG, ci->clientnum, i, ++f.version);
         }

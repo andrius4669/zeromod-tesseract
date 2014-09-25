@@ -17,6 +17,12 @@ VARF(servernodamage_global, 0, 1, 1,
     z_servcmd_set_privilege("nodamage", servernodamage_global ? PRIV_MASTER : PRIV_NONE);
 });
 
+static int z_hasnodamage(clientinfo *target, clientinfo *actor)
+{
+    if(!m_edit || !actor) return 0;
+    return servernodamage_global ? z_nodamage : max(target->nodamage, actor->nodamage);
+}
+
 static void z_servcmd_nodamage(int argc, char **argv, int sender)
 {
     int val = argc >= 2 ? atoi(argv[1]) : -1;

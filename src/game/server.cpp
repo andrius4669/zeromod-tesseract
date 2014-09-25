@@ -120,6 +120,7 @@ namespace server
         int lastshot;
         projectilestate<8> projs;
         int frags, flags, deaths, teamkills, shotdamage, damage;
+        int stolen, returned;
         int lasttimeplayed, timeplayed;
         float effectiveness;
 
@@ -144,6 +145,7 @@ namespace server
             timeplayed = 0;
             effectiveness = 0;
             frags = flags = deaths = teamkills = shotdamage = damage = 0;
+            stolen = returned = 0;
 
             lastdeath = 0;
 
@@ -171,6 +173,7 @@ namespace server
         uint ip;
         string name;
         int frags, flags, deaths, teamkills, shotdamage, damage;
+        int stolen, returned;
         int timeplayed;
         float effectiveness;
 
@@ -184,6 +187,8 @@ namespace server
             damage = gs.damage;
             timeplayed = gs.timeplayed;
             effectiveness = gs.effectiveness;
+            stolen = gs.stolen;
+            returned = gs.returned;
         }
 
         void restore(servstate &gs)
@@ -196,11 +201,12 @@ namespace server
             gs.damage = damage;
             gs.timeplayed = timeplayed;
             gs.effectiveness = effectiveness;
+            gs.stolen = stolen;
+            gs.returned = returned;
         }
     };
 
     extern int gamemillis, nextexceeded;
-    extern int gamemode;
 
     #include "z_geoipstate.h"
 
@@ -380,13 +386,6 @@ namespace server
         }
 
         void setdisconnectreason(const char *reason) { DELETEP(disc_reason); disc_reason = newstring(reason); }
-
-        int hasnodamage(clientinfo *ci) const  // 0 - can be damaged, 1 - no damage, 2 - no damage and hitpush
-        {
-            // NULL is used for suicides
-            if(!ci || !m_edit) return 0;
-            return max(nodamage, ci->nodamage);
-        }
     };
 
     struct ban
@@ -509,9 +508,9 @@ namespace server
             if(rot.match(mode, map)) return i;
         }
         int start;
-        for(start = max(curmaprotation, 0) - 1; start >= 0; start--) if(!maprotations[start].modes) break;
+        for(start = clamp(curmaprotation, 0, maprotations.length()) - 1; start >= 0; start--) if(!maprotations[start].modes) break;
         start++;
-        for(int i = start; i < curmaprotation; i++)
+        for(int i = start; i < min(curmaprotation, maprotations.length()); i++)
         {
             maprotation &rot = maprotations[i];
             if(!rot.modes) break;
@@ -2012,19 +2011,15 @@ namespace server
 
     void rotatemap(bool next)
     {
-        if(!maprotations.inrange(curmaprotation))
+        curmaprotation = findmaprotation(gamemode, smapname);
+        if(curmaprotation < 0) { if(smapname[0]) curmaprotation = findmaprotation(gamemode, ""); }
+        else if(next) nextmaprotation();
+        if(maprotations.inrange(curmaprotation) && maprotations[curmaprotation].modes)
         {
-            changemap("", 0);
-            return;
+            maprotation &rot = maprotations[curmaprotation];
+            changemap(rot.map, rot.findmode(gamemode));
         }
-        if(next)
-        {
-            curmaprotation = findmaprotation(gamemode, smapname);
-            if(curmaprotation >= 0) nextmaprotation();
-            else curmaprotation = smapname[0] ? max(findmaprotation(gamemode, ""), 0) : 0;
-        }
-        maprotation &rot = maprotations[curmaprotation];
-        changemap(rot.map, rot.findmode(gamemode));
+        else changemap(smapname, gamemode);
     }
 
     struct votecount
@@ -2134,11 +2129,12 @@ namespace server
     void dodamage(clientinfo *target, clientinfo *actor, int damage, int atk, const vec &hitpush = vec(0, 0, 0))
     {
         servstate &ts = target->state;
-        if(!target->hasnodamage(actor)) ts.dodamage(damage);
+        int hnd = z_hasnodamage(target, actor);
+        if(!hnd) ts.dodamage(damage);
         if(target!=actor && !isteam(target->team, actor->team)) actor->state.damage += damage;
         sendf(-1, 1, "ri5", N_DAMAGE, target->clientnum, actor->clientnum, damage, ts.health);
         if(target==actor) target->setpushed();
-        else if(!hitpush.iszero() && target->hasnodamage(actor) < 2)
+        else if(!hitpush.iszero() && hnd < 2)
         {
             ivec v = vec(hitpush).rescale(DNF);
             sendf(ts.health<=0 ? -1 : target->ownernum, 1, "ri7", N_HITPUSH, target->clientnum, atk, damage, v.x, v.y, v.z);
@@ -2193,7 +2189,7 @@ namespace server
 
     void suicideevent::process(clientinfo *ci)
     {
-        if(!ci->hasnodamage(NULL)) suicide(ci);
+        if(!z_hasnodamage(ci, NULL)) suicide(ci);
     }
 
     void explodeevent::process(clientinfo *ci)
@@ -2858,6 +2854,8 @@ namespace server
     #include "z_msgfilter.h"
     #include "z_servcmd.h"
 
+    VAR(serverautomaster, 0, 0, 2);
+
     void parsepacket(int sender, int chan, packetbuf &p)     // has to parse exactly each byte of the packet
     {
         if(sender<0 || p.packet->flags&ENET_PACKET_FLAG_UNSEQUENCED || chan > 2) return;
@@ -2893,7 +2891,11 @@ namespace server
                         }
                         ci->connectauth = disc;
                     }
-                    else connected(ci);
+                    else
+                    {
+                        connected(ci);
+                        if(serverautomaster && clients.length()<=1) setmaster(ci, true, "", NULL, NULL, serverautomaster>1 ? PRIV_AUTH : PRIV_MASTER, true);
+                    }
                     break;
                 }
 
