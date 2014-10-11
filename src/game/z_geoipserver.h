@@ -124,8 +124,8 @@ void z_servcmd_geoip(int argc, char **argv, int sender)
 fail:
     sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[i]));
 }
-SCOMMANDN(geoip, PRIV_NONE, z_servcmd_geoip);
-SCOMMANDNH(getip, PRIV_NONE, z_servcmd_geoip);
+SCOMMAND(geoip, PRIV_NONE, z_servcmd_geoip);
+SCOMMANDH(getip, PRIV_NONE, z_servcmd_geoip);
 
 ICOMMAND(s_geoip_resolveclients, "", (),
 {

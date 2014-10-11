@@ -9,23 +9,6 @@
 #include "GeoIPCity.h"
 
 static GeoIP *z_gi = NULL, *z_gic = NULL;
-static bool z_geoip_reset_atexit = false;
-
-#ifndef GEOIP_OPENMODE
-    #ifndef _WIN32
-        #define GEOIP_OPENMODE GEOIP_MMAP_CACHE
-    #else
-        #define GEOIP_OPENMODE GEOIP_INDEX_CACHE
-    #endif
-#endif
-
-#ifndef GEOIP_COUNTRY_OPENMODE
-    #define GEOIP_COUNTRY_OPENMODE GEOIP_OPENMODE
-#endif
-
-#ifndef GEOIP_CITY_OPENMODE
-    #define GEOIP_CITY_OPENMODE GEOIP_OPENMODE
-#endif
 
 #endif // USE_GEOIP
 
@@ -89,11 +72,25 @@ static void z_init_geoip()
 {
     if(!geoip_enable) return;
 #ifdef USE_GEOIP
+    static bool z_geoip_reset_atexit = false;
     if(!z_geoip_reset_atexit)
     {
         z_geoip_reset_atexit = true;
         atexit(z_reset_geoip);
     }
+    #ifndef GEOIP_OPENMODE
+        #ifndef _WIN32
+            #define GEOIP_OPENMODE GEOIP_MMAP_CACHE
+        #else
+            #define GEOIP_OPENMODE GEOIP_INDEX_CACHE
+        #endif
+    #endif
+    #ifndef GEOIP_COUNTRY_OPENMODE
+        #define GEOIP_COUNTRY_OPENMODE GEOIP_OPENMODE
+    #endif
+    #ifndef GEOIP_CITY_OPENMODE
+        #define GEOIP_CITY_OPENMODE GEOIP_OPENMODE
+    #endif
     if(geoip_country_enable && geoip_country_database[0] && !z_gi)
     {
         const char *found = findfile(geoip_country_database, "rb");
@@ -131,10 +128,10 @@ static const char *z_geoip_decode_continent(const char *cont)
 
 void z_geoip_resolveclient(geoipstate &gs, enet_uint32 ip)
 {
-    if(!geoip_enable) return;
     gs.cleanup();
+    if(!geoip_enable) return;
     z_init_geoip();
-    ip = ENET_NET_TO_HOST_32(ip);
+    ip = ENET_NET_TO_HOST_32(ip);   // geoip uses host byte order
     if(!ip) return;
     // look in list of reserved ips
     loopi(sizeof(reservedips)/sizeof(reservedips[0])) if((ip & reservedips[i].mask) == reservedips[i].ip)

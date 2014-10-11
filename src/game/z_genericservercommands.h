@@ -35,8 +35,8 @@ static void z_servcmd_commands(int argc, char **argv, int sender)
         sendf(sender, 1, "ris", N_SERVMSG, cbufs[i].getbuf());
     }
 }
-SCOMMANDNA(commands, PRIV_NONE, z_servcmd_commands, 1);
-SCOMMANDNAH(help, PRIV_NONE, z_servcmd_commands, 1);
+SCOMMANDA(commands, PRIV_NONE, z_servcmd_commands, 1);
+SCOMMANDAH(help, PRIV_NONE, z_servcmd_commands, 1);
 
 static const struct z_timedivinfo { const char *name; int timediv; } z_timedivinfos[] =
 {
@@ -68,17 +68,20 @@ void z_servcmd_info(int argc, char **argv, int sender)
     uptimebuf.add('\0');
     sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("server uptime: %s", uptimebuf.getbuf()));
 }
-SCOMMANDNA(info, PRIV_NONE, z_servcmd_info, 1);
+SCOMMANDA(info, PRIV_NONE, z_servcmd_info, 1);
 
 void z_servcmd_stats(int argc, char **argv, int sender)
 {
-    int cn;
+    int cn, i;
     clientinfo *ci = NULL, *senderci = getinfo(sender);
     vector<clientinfo *> cis;
-    int i;
     for(i = 1; i < argc; i++)
     {
-        if(!z_parseclient(argv[i], &cn)) goto fail;
+        if(!z_parseclient_verify(argv[i], &cn, true, true, senderci->local || senderci->privilege>=PRIV_ADMIN))
+        {
+            sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[i]));
+            return;
+        }
         if(cn < 0)
         {
             cis.shrink(0);
@@ -86,7 +89,6 @@ void z_servcmd_stats(int argc, char **argv, int sender)
             break;
         }
         ci = getinfo(cn);
-        if(!ci || !ci->connected || (ci->spy && senderci && !senderci->local && senderci->privilege<PRIV_ADMIN)) goto fail;
         if(cis.find(ci)<0) cis.add(ci);
     }
 
@@ -106,36 +108,31 @@ void z_servcmd_stats(int argc, char **argv, int sender)
             ci->state.damage*100/max(ci->state.shotdamage,1), float(ci->state.frags)/max(ci->state.deaths,1));
         sendf(sender, 1, "ris", N_SERVMSG, buf);
     }
-    return;
-fail:
-    sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[i]));
 }
-SCOMMANDN(stats, PRIV_NONE, z_servcmd_stats);
+SCOMMAND(stats, PRIV_NONE, z_servcmd_stats);
 
 VAR(servcmd_pm_comfirmation, 0, 1, 1);
-
 void z_servcmd_pm(int argc, char **argv, int sender)
 {
     if(argc <= 2) { sendf(sender, 1, "ris", N_SERVMSG, "please specify client and message"); return; }
     int cn;
     clientinfo *ci;
-    if(!z_parseclient(argv[1], &cn)) goto cnfail;
+    if(!z_parseclient_verify(argv[1], &cn, false, true, true))
+    {
+        sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[1]));
+        return;
+    }
     ci = getinfo(cn);
-    if(!ci || !ci->connected) goto cnfail;
     if(ci->state.aitype!=AI_NONE) { sendf(sender, 1, "ris", N_SERVMSG, "you can not send private message to bot"); return; }
     ci = getinfo(sender);
-    if(!ci) return;
     sendf(cn, 1, "ris", N_SERVMSG, tempformatstring("\f2pm: \f7%s \f5(%d)\f7: \f0%s", ci->name, ci->clientnum, argv[2]));
     if(servcmd_pm_comfirmation)
     {
         ci = getinfo(cn);
         sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("\f2your private message successfully sent to %s \f5(%d)", ci->name, ci->clientnum));
     }
-    return;
-cnfail:
-    sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[1]));
 }
-SCOMMANDNA(pm, PRIV_NONE, z_servcmd_pm, 2);
+SCOMMANDA(pm, PRIV_NONE, z_servcmd_pm, 2);
 
 #include "z_mutes.h"
 

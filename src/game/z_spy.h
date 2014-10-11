@@ -9,6 +9,7 @@ void z_setspy(clientinfo *ci, bool val)
     if(ci->spy ? val : !val) return;
     if(val)
     {
+        flushserver(true);
         // spectate client first (show only to client itself)
         if(ci->state.state==CS_ALIVE) suicide(ci);
         if(smode) smode->leavegame(ci);

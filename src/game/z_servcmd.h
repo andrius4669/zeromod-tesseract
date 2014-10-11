@@ -5,21 +5,20 @@
 
 bool z_parseclient(const char *str, int *cn)
 {
-    if(!str) return false;
     char *end;
     int n = strtol(str, &end, 10);
     if(*str && !*end) { *cn = n; return true; }
-    loopv(clients)
-    {
-        clientinfo *ci = clients[i];
-        if(!strcmp(str, ci->name)) { *cn = ci->clientnum; return true; }
-    }
-    loopv(clients)
-    {
-        clientinfo *ci = clients[i];
-        if(!strcasecmp(str, ci->name)) { *cn = ci->clientnum; return true; }
-    }
+    loopv(clients) if(!strcmp(str, clients[i]->name)) { *cn = clients[i]->clientnum; return true; }
+    loopv(clients) if(!strcasecmp(str, clients[i]->name)) { *cn = clients[i]->clientnum; return true; }
     return false;
+}
+
+bool z_parseclient_verify(const char *str, int *cn, bool allowall, bool allowbot = false, bool allowspy = false)
+{
+    if(!z_parseclient(str, cn)) return false;
+    if(cn < 0) return allowall;
+    clientinfo *ci = allowbot ? getinfo(*cn) : (clientinfo *)getclientinfo(*cn);
+    return ci && ci->connected && (allowspy || !ci->spy);
 }
 
 SVAR(servcmd_chars, "");
@@ -34,15 +33,15 @@ bool z_servcmd_check(char *&text)
     return true;
 }
 
-#define Z_MAXSERVCMDARGS 25
+#define Z_MAXSERVCMDARGS 32
 
 void z_servcmd_parse(int sender, char *text)
 {
     if(!z_initedservcommands) z_initservcommands();
-    
+
     clientinfo *ci = (clientinfo *)getclientinfo(sender);
     if(!ci) return;
-    
+
     int argc = 1;
     char *argv[Z_MAXSERVCMDARGS];
     argv[0] = text;
@@ -58,11 +57,11 @@ void z_servcmd_parse(int sender, char *text)
     loopv(z_servcommands)
     {
         z_servcmdinfo &c = z_servcommands[i];
-        if(!c.valid() || strcmp(c.name, text)) continue;
+        if(!c.valid() || strcasecmp(c.name, text)) continue;
         cc = &c;
         break;
     }
-    if(!cc || (cc->hidden && !ci->local && ci->privilege < cc->privilege))
+    if(!cc || (!cc->enabled && !ci->local) || (cc->hidden && !ci->local && ci->privilege < cc->privilege))
     {
         sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown server command: %s", text));
         return;
