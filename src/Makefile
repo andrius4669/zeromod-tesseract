@@ -1,6 +1,4 @@
 CXXFLAGS= -O3 -fomit-frame-pointer -ffast-math
-# for debugging...
-#CXXFLAGS= -O0 -ggdb3 -pipe -fno-inline -fstack-protector -fsanitize=address
 override CXXFLAGS+= -Wall -fsigned-char -fno-exceptions -fno-rtti
 
 PLATFORM= $(shell uname -s)
@@ -128,7 +126,7 @@ CLIENT_OBJS= \
 
 CLIENT_PCH= shared/cube.h.gch engine/engine.h.gch game/game.h.gch
 
-SERVER_INCLUDES= -DSTANDALONE -Istandalone/shared -Istandalone/engine -Istandalone/game $(INCLUDES)
+SERVER_INCLUDES= -DSTANDALONE=1 -Istandalone/shared -Istandalone/engine -Istandalone/game $(INCLUDES)
 ifneq (,$(findstring MINGW,$(PLATFORM)))
 SERVER_INCLUDES+= -Iinclude
 SERVER_LIBS= -mwindows $(STD_LIBS) -L$(WINBIN) -L$(WINLIB) -lzlib1 -lenet -lws2_32 -lwinmm
@@ -258,8 +256,8 @@ libenet: enet/libenet.a
 depend:
 	makedepend -Y -Ishared -Iengine -Igame $(CLIENT_OBJS:.o=.cpp)
 	makedepend -a -o.h.gch -Y -Ishared -Iengine -Igame $(CLIENT_PCH:.h.gch=.h)
-	makedepend -a -pstandalone/ -Y -DSTANDALONE -Ishared -Iengine -Igame $(SERVER_MASTER_OBJS:standalone/%.o=%.cpp)
-	makedepend -a -pstandalone/ -o.h.gch -Y -DSTANDALONE -Ishared -Iengine -Igame $(SERVER_PCH:standalone/%.h.gch=%.h)
+	makedepend -a -pstandalone/ -Y -DSTANDALONE=1 -Ishared -Iengine -Igame $(SERVER_MASTER_OBJS:standalone/%.o=%.cpp)
+	makedepend -a -pstandalone/ -o.h.gch -Y -DSTANDALONE=1 -Ishared -Iengine -Igame $(SERVER_PCH:standalone/%.h.gch=%.h)
 
 # DO NOT DELETE
 
