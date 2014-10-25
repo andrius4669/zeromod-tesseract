@@ -29,7 +29,7 @@ bool z_servcmd_check(char *&text)
     while(*c != '\0' && *c != text[0]) c++;
     if(*c == '\0' || text[1] == '\0') return false;
     text++;
-    if(*text == *c) return false;
+    if(*text == *c) return false;   // double cmd char -> interept as normal message
     return true;
 }
 

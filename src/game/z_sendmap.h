@@ -46,7 +46,7 @@ void z_servcmd_sendmap(int argc, char **argv, int sender)
 failcn:
     sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[1]));
 }
-SCOMMANDNA(sendmap, PRIV_MASTER, z_servcmd_sendmap, 1);
-SCOMMANDNAH(sendto, PRIV_MASTER, z_servcmd_sendmap, 1);
+SCOMMANDA(sendmap, PRIV_MASTER, z_servcmd_sendmap, 1);
+SCOMMANDAH(sendto, PRIV_MASTER, z_servcmd_sendmap, 1);
 
 #endif // Z_SENDMAP_H

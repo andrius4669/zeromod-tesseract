@@ -121,6 +121,7 @@ namespace server
         projectilestate<8> projs;
         int frags, flags, deaths, teamkills, shotdamage, damage;
         int stolen, returned;
+        int lastkill, multikills, rampage;
         int lasttimeplayed, timeplayed;
         float effectiveness;
 
@@ -159,6 +160,7 @@ namespace server
             deadflush = 0;
             lastspawn = -1;
             lastshot = 0;
+            lastkill = multikills = rampage = 0;
         }
 
         void reassign()
@@ -2125,10 +2127,13 @@ namespace server
     void startintermission() { gamelimit = min(gamelimit, gamemillis); checkintermission(); }
 
     #include "z_nodamage.h"
+    #include "z_announcekills.h"
+    VAR(antispawnkill, 0, 0, 5000); // in milliseconds
 
     void dodamage(clientinfo *target, clientinfo *actor, int damage, int atk, const vec &hitpush = vec(0, 0, 0))
     {
         servstate &ts = target->state;
+        if(antispawnkill && ts.lastdeath && gamemillis-ts.lastdeath < antispawnkill) return; // ts.lastdeath is reused for spawntime
         int hnd = z_hasnodamage(target, actor);
         if(!hnd) ts.dodamage(damage);
         if(target!=actor && !isteam(target->team, actor->team)) actor->state.damage += damage;
@@ -2155,6 +2160,7 @@ namespace server
             teaminfo *t = m_teammode && validteam(actor->team) ? &teaminfos[actor->team-1] : NULL;
             if(t) t->frags += fragvalue;
             sendf(-1, 1, "ri5", N_DIED, target->clientnum, actor->clientnum, actor->state.frags, t ? t->frags : 0);
+            z_announcekill(actor, target, fragvalue);
             target->position.setsize(0);
             if(smode) smode->died(target, actor);
             ts.state = CS_DEAD;
@@ -2415,7 +2421,7 @@ namespace server
  
     void checkmaps(int req = -1)
     {
-        if((m_edit && z_connectsendmap < 2) || !smapname[0]) return;
+        if((m_edit && z_autosendmap < 2) || !smapname[0]) return;
         vector<crcinfo> crcs;
         int total = 0, unsent = 0, invalid = 0;
         if(mcrc) crcs.add(crcinfo(mcrc, clients.length() + 1));
@@ -2447,7 +2453,7 @@ namespace server
             formatstring(msg, "%s has modified map \"%s\"", colorname(ci), smapname);
             sendf(req, 1, "ris", N_SERVMSG, msg);
             if(req < 0) ci->warned = true;
-            if(req < 0 && m_edit && z_connectsendmap >= 2) z_sendmap(ci, NULL);
+            if(req < 0 && m_edit && z_autosendmap >= 2) z_sendmap(ci, NULL);
         }
         if(crcs.length() >= 2) loopv(crcs)
         {
@@ -2459,7 +2465,7 @@ namespace server
                 formatstring(msg, "%s has modified map \"%s\"", colorname(ci), smapname);
                 sendf(req, 1, "ris", N_SERVMSG, msg);
                 if(req < 0) ci->warned = true;
-                if(req < 0 && m_edit && z_connectsendmap >= 2) z_sendmap(ci, NULL);
+                if(req < 0 && m_edit && z_autosendmap >= 2) z_sendmap(ci, NULL);
             }
         }
         if(m_edit) return;
@@ -2776,7 +2782,6 @@ namespace server
 #endif
 
     #include "z_sendmap.h"
-    #include "z_autosendmap.h"
 
     void receivefile(int sender, uchar *data, int len)
     {
@@ -2790,7 +2795,6 @@ namespace server
         if(!mapdata) { sendf(sender, 1, "ris", N_SERVMSG, "failed to open temporary file for map"); return; }
         mapdata->write(data, len);
         sendservmsgf("[%s sent a map to server, \"/getmap\" to receive it]", colorname(ci));
-        if(z_autosendmap) loopv(clients) if(clients[i]->state.aitype == AI_NONE && clients[i]->clientnum != sender) z_sendmap(clients[i], NULL, mapdata, true);
     }
 
     void sendclipboard(clientinfo *ci)
@@ -2844,11 +2848,9 @@ namespace server
 
         if(servermotd[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, servermotd);
 
-        if(m_edit && z_connectsendmap == 1) z_sendmap(ci, NULL);
-        extern bool z_autoeditmute;
-        if(z_autoeditmute) ci->editmute = true;
-        extern int z_nodamage;
-        ci->nodamage = z_nodamage;
+        if(m_edit && z_autosendmap == 1) z_sendmap(ci, NULL);
+        extern bool z_autoeditmute; ci->editmute = z_autoeditmute;
+        extern int z_nodamage; ci->nodamage = z_nodamage;
     }
 
     #include "z_msgfilter.h"
@@ -3104,6 +3106,7 @@ namespace server
                 if(!cq || (cq->state.state!=CS_ALIVE && cq->state.state!=CS_DEAD) || ls!=cq->state.lifesequence || cq->state.lastspawn<0 || !validgun(gunselect)) break;
                 cq->state.lastspawn = -1;
                 cq->state.state = CS_ALIVE;
+                cq->state.lastdeath = gamemillis; // reuse lastdeath to know spawntime
                 cq->state.gunselect = gunselect;
                 cq->exceeded = 0;
                 if(smode) smode->spawned(cq);
