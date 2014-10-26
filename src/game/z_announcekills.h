@@ -49,7 +49,7 @@ void z_announcekill(clientinfo *actor, clientinfo *victim, int fragval)
         actor->state.multikills++;
         actor->state.rampage++;
     }
-    if(!announcekills || (!announcekills_rampage && !announcekills_multikill)) return;
+    if(m_edit || !announcekills || (!announcekills_rampage && !announcekills_multikill)) return;
     bool showactor = fragval > 0 && actor->state.state==CS_ALIVE;
     loopv(clients)
     {
@@ -60,8 +60,8 @@ void z_announcekill(clientinfo *actor, clientinfo *victim, int fragval)
 
         if(announcekills_stopped && victim->state.rampage >= announcekills_stopped_num)
         {
-            const char *vname = z_teamcolorname(victim, "you", ci);
-            name = z_teamcolorname(actor, "you", ci);
+            const char *vname = z_teamcolorname(victim, NULL, ci);
+            name = z_teamcolorname(actor, NULL, ci);
             sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("\f2%s was stopped by %s", vname, name));
         }
 
@@ -100,7 +100,7 @@ void z_announcekill(clientinfo *actor, clientinfo *victim, int fragval)
                 }
                 if(msg)
                 {
-                    if(!name) name = z_teamcolorname(actor, "you", ci);
+                    if(!name) name = z_teamcolorname(actor, NULL, ci);
                     sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("\f2%s is %s", name, msg));
                 }
             }

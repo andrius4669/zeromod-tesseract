@@ -2113,11 +2113,13 @@ namespace server
         }
     }
 
+    #include "z_awards.h"
     void checkintermission()
     {
         if(gamemillis >= gamelimit && !interm)
         {
             sendf(-1, 1, "ri2", N_TIMEUP, 0);
+            z_awards();
             if(smode) smode->intermission();
             changegamespeed(100);
             interm = gamemillis + 10000;

@@ -134,6 +134,13 @@ void z_servcmd_pm(int argc, char **argv, int sender)
 }
 SCOMMANDA(pm, PRIV_NONE, z_servcmd_pm, 2);
 
+void z_servcmd_interm(int argc, char **argv, int sender)
+{
+    startintermission();
+}
+SCOMMANDAH(interm, PRIV_MASTER, z_servcmd_interm, 1);
+SCOMMANDA(intermission, PRIV_MASTER, z_servcmd_interm, 1);
+
 #include "z_mutes.h"
 
 #include "z_loadmap.h"
