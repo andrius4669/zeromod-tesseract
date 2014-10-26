@@ -17,36 +17,9 @@ template<size_t N> static inline void z_awards_set_colors(char (&s)[N]) { z_awar
 */
 
 template<typename T>
-static T z_awards_best_var_stat(vector<clientinfo *> &best, int offset)
+static bool z_awards_best_stat(vector<clientinfo *> &best, T &bests, T (* func)(clientinfo *))
 {
     best.setsize(0);
-    T bests = T(0);
-    loopv(clients)
-    {
-        if(best.empty())
-        {
-            best.add(clients[i]);
-            bests = *(T *)(((char *)clients[i]) + offset);
-        }
-        else if(bests == *(T *)(((char *)clients[i]) + offset))
-        {
-            best.add(clients[i]);
-        }
-        else if(bests < *(T *)(((char *)clients[i]) + offset))
-        {
-            best.setsize(0);
-            best.add(clients[i]);
-            bests = *(T *)(((char *)clients[i]) + offset);
-        }
-    }
-    return bests;
-}
-
-template<typename T>
-static T z_awards_best_func_stat(vector<clientinfo *> &best, T (* func)(clientinfo *))
-{
-    best.setsize(0);
-    T bests = T(0);
     loopv(clients)
     {
         if(best.empty())
@@ -66,7 +39,7 @@ static T z_awards_best_func_stat(vector<clientinfo *> &best, T (* func)(clientin
             }
         }
     }
-    return bests;
+    return best.length();
 }
 
 static int z_awards_print_best(vector<char> &str, vector<clientinfo *> &best, int max = 0)
@@ -97,8 +70,8 @@ void z_awards()
     tp = "\f3Awards:\f6";
     str.put(tp, strlen(tp));
 
-    int bestk = z_awards_best_var_stat<int>(best, (((char *)&clients[0]->state.frags) - (char *)clients[0]));
-    if(best.length())
+    int bestk;
+    if(z_awards_best_stat<int>(best, bestk, [](clientinfo *ci) { return ci->state.frags; }))
     {
         tp = " Kills: ";
         str.put(tp, strlen(tp));
@@ -107,8 +80,8 @@ void z_awards()
         str.put(tp, strlen(tp));
     }
 
-    double bestp = z_awards_best_func_stat<double>(best, [](clientinfo *ci) { return double(ci->state.frags)/max(ci->state.deaths, 1); });
-    if(best.length())
+    double bestp;
+    if(z_awards_best_stat<double>(best, bestp, [](clientinfo *ci) { return double(ci->state.frags)/max(ci->state.deaths, 1); }))
     {
         tp = " KpD: ";
         str.put(tp, strlen(tp));
@@ -117,8 +90,8 @@ void z_awards()
         str.put(tp, strlen(tp));
     }
 
-    int besta = z_awards_best_func_stat<int>(best, [](clientinfo *ci) { return ci->state.damage*100/max(ci->state.shotdamage,1); });
-    if(best.length())
+    int besta;
+    if(z_awards_best_stat<int>(best, besta, [](clientinfo *ci) { return ci->state.damage*100/max(ci->state.shotdamage,1); }))
     {
         tp = " Acc: ";
         str.put(tp, strlen(tp));
@@ -127,8 +100,8 @@ void z_awards()
         str.put(tp, strlen(tp));
     }
 
-    int bestd = z_awards_best_var_stat<int>(best, (((char *)&clients[0]->state.damage) - (char *)clients[0]));
-    if(best.length())
+    int bestd;
+    if(z_awards_best_stat<int>(best, bestd, [](clientinfo *ci) { return ci->state.damage; }))
     {
         tp = " Damage: ";
         str.put(tp, strlen(tp));
