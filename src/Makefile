@@ -134,7 +134,7 @@ MASTER_LIBS= $(STD_LIBS) -L$(WINBIN) -L$(WINLIB) -lzlib1 -lenet -lws2_32 -lwinmm
 else
 SERVER_LIBS= -Lenet -lenet -lz
 MASTER_LIBS= $(SERVER_LIBS)
-ifeq ($(shell ./check_geoip.sh $(CXX) $(CXXFLAGS) $(SERVER_INCLUDES) -lGeoIP),1)
+ifeq ($(shell ./check_geoip.sh $(CXX) $(CXXFLAGS) $(SERVER_INCLUDES)),1)
 SERVER_INCLUDES+= -DUSE_GEOIP
 SERVER_LIBS+= -lGeoIP
 CLIENT_INCLUDES+= -DUSE_GEOIP
