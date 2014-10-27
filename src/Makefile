@@ -1,5 +1,5 @@
 CXXFLAGS= -O3 -fomit-frame-pointer -ffast-math
-override CXXFLAGS+= -Wall -std=c++11 -fsigned-char -fno-exceptions -fno-rtti
+override CXXFLAGS+= -Wall -std=gnu++11 -fsigned-char -fno-exceptions -fno-rtti
 
 PLATFORM= $(shell uname -s)
 PLATFORM_ARCH= $(shell uname -m)
