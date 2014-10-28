@@ -15,10 +15,13 @@ struct msinfo
     int masteroutpos, masterinpos;
     bool allowupdatemaster;
     int masternum;
-    
+    int *masterauthpriv;
+    bool masterauthpriv_allow;
+
     msinfo(): masterport(server::masterport()), mastersock(ENET_SOCKET_NULL),
         lastupdatemaster(0), lastconnectmaster(0), masterconnecting(0), masterconnected(0),
-        masteroutpos(0), masterinpos(0), allowupdatemaster(true), masternum(-1)
+        masteroutpos(0), masterinpos(0), allowupdatemaster(true), masternum(-1),
+        masterauthpriv(NULL), masterauthpriv_allow(false)
     {
         copystring(mastername, server::defaultmaster());
         masterauth[0] = '\0';
@@ -26,7 +29,7 @@ struct msinfo
         masteraddress.port = ENET_PORT_ANY;
     }
     ~msinfo() { disconnectmaster(); }
-    
+
     void disconnectmaster()
     {
         if(mastersock != ENET_SOCKET_NULL)
@@ -35,17 +38,18 @@ struct msinfo
             enet_socket_destroy(mastersock);
             mastersock = ENET_SOCKET_NULL;
         }
-        
+
         masterout.setsize(0);
         masterin.setsize(0);
         masteroutpos = masterinpos = 0;
-        
+
         masteraddress.host = ENET_HOST_ANY;
         masteraddress.port = ENET_PORT_ANY;
-        
+
         lastupdatemaster = masterconnecting = masterconnected = 0;
+        DELETEP(masterauthpriv);
     }
-    
+
     ENetSocket connectmaster(bool wait)
     {
         if(!mastername[0]) return ENET_SOCKET_NULL;
@@ -74,7 +78,7 @@ struct msinfo
         if(isdedicatedserver()) logoutf("could not connect to master server (%s)", mastername);
         return ENET_SOCKET_NULL;
     }
-    
+
     bool requestmaster(const char *req)
     {
         if(mastersock == ENET_SOCKET_NULL)
@@ -83,51 +87,51 @@ struct msinfo
             if(mastersock == ENET_SOCKET_NULL) return false;
             lastconnectmaster = masterconnecting = totalmillis ? totalmillis : 1;
         }
-        
+
         if(masterout.length() >= 4096) return false;
-        
+
         masterout.put(req, strlen(req));
         return true;
     }
-    
+
     bool requestmasterf(const char *fmt, ...)
     {
         defvformatstring(req, fmt, fmt);
         return requestmaster(req);
     }
-    
+
     void processmasterinput()
     {
         if(masterinpos >= masterin.length()) return;
-        
+
         char *input = &masterin[masterinpos], *end = (char *)memchr(input, '\n', masterin.length() - masterinpos);
         while(end)
         {
             *end++ = '\0';
-            
+
             const char *args = input;
             while(args < end && !iscubespace(*args)) args++;
             int cmdlen = args - input;
             while(args < end && iscubespace(*args)) args++;
-            
+
             if(!strncmp(input, "failreg", cmdlen))
                 conoutf(CON_ERROR, "master server (%s) registration failed: %s", mastername, args);
             else if(!strncmp(input, "succreg", cmdlen))
                 conoutf("master server (%s) registration succeeded", mastername);
             else server::processmasterinput(masternum, input, cmdlen, args);
-            
+
             masterinpos = end - masterin.getbuf();
             input = end;
             end = (char *)memchr(input, '\n', masterin.length() - masterinpos);
         }
-        
+
         if(masterinpos >= masterin.length())
         {
             masterin.setsize(0);
             masterinpos = 0;
         }
     }
-    
+
     void flushmasteroutput()
     {
         if(masterconnecting && totalmillis - masterconnecting >= 60000)
@@ -136,7 +140,7 @@ struct msinfo
             disconnectmaster();
         }
         if(masterout.empty() || !masterconnected) return;
-        
+
         ENetBuffer buf;
         buf.data = &masterout[masteroutpos];
         buf.dataLength = masterout.length() - masteroutpos;
@@ -152,12 +156,12 @@ struct msinfo
         }
         else disconnectmaster();
     }
-    
+
     void flushmasterinput()
     {
         if(masterin.length() >= masterin.capacity())
             masterin.reserve(4096);
-        
+
         ENetBuffer buf;
         buf.data = masterin.getbuf() + masterin.length();
         buf.dataLength = masterin.capacity() - masterin.length();
@@ -169,13 +173,16 @@ struct msinfo
         }
         else disconnectmaster();
     }
-    
+
     void updatemasterserver()
     {
         extern int serverport;
         if(!masterconnected && lastconnectmaster && totalmillis-lastconnectmaster <= 5*60*1000) return;
-        if(mastername[0] && allowupdatemaster) requestmasterf("regserv %d\n", serverport);
-        lastupdatemaster = totalmillis ? totalmillis : 1;
+        if(mastername[0] && allowupdatemaster)
+        {
+            requestmasterf("regserv %d\n", serverport);
+            lastupdatemaster = totalmillis ? totalmillis : 1;
+        }
     }
 };
 
@@ -258,7 +265,12 @@ int findauthmaster(const char *desc, int old)
 
 const char *getmastername(int m)
 {
-    return mss.inrange(m) ? mss[m].mastername : "";
+    static char *mn = NULL;
+    if(!mss.inrange(m)) return "";
+    if(mss[m].masterport == server::masterport()) return mss[m].mastername;
+    if(!mn) mn = new char[MAXSTRLEN];
+    nformatstring(mn, MAXSTRLEN, "%s:%d", mss[m].mastername, mss[m].masterport);
+    return mn;
 }
 
 const char *getmasterauth(int m)
@@ -267,5 +279,28 @@ const char *getmasterauth(int m)
 }
 
 int nummss() { return mss.length(); }
+
+ICOMMAND(masterauthpriv, "i", (int *i),
+{
+    if(!mss.inrange(currmss)) addms();
+    mss[currmss].masterauthpriv_allow = *i!=0;
+});
+
+void masterauthpriv_set(int m, int priv)
+{
+    if(!mss.inrange(m)) return;
+    DELETEP(mss[m].masterauthpriv);
+    mss[m].masterauthpriv = new int(priv);
+}
+
+void masterauthpriv_reset(int m)
+{
+    if(mss.inrange(m)) DELETEP(mss[m].masterauthpriv);
+}
+
+const int *masterauthpriv_get(int m)
+{
+    return mss.inrange(m) && mss[m].masterauthpriv_allow ? mss[m].masterauthpriv : NULL;
+}
 
 #endif // Z_MS_ENGINESERVER_OVERRIDE_H

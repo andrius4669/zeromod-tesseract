@@ -34,19 +34,24 @@ void authfailed(int m, uint id)
     authfailed(findauth(m, id));
 }
 
-void authsucceeded(int m, uint id, int priv = PRIV_AUTH)
+void authsucceeded(int m, uint id, int dpriv = PRIV_AUTH)
 {
+    const int *privp = masterauthpriv_get(m);
+    int priv = privp ? *privp : dpriv;
+    masterauthpriv_reset(m);
+
     clientinfo *ci = findauth(m, id);
     if(!ci) return;
     ci->cleanauth(ci->connectauth!=0);
-    if(ci->connectauth) connected(ci);
+    bool connecting = false;
+    if(ci->connectauth) { connected(ci); connecting = true; }
     if(ci->authkickvictim >= 0)
     {
-        if(setmaster(ci, true, "", ci->authname, ci->authdesc, priv, false, true))
+        if(setmaster(ci, true, "", ci->authname, ci->authdesc, priv, false, true, !connecting))
             trykick(ci, ci->authkickvictim, ci->authkickreason, ci->authname, ci->authdesc, priv);
         ci->cleanauthkick();
     }
-    else setmaster(ci, true, "", ci->authname, ci->authdesc, priv, false, false);
+    else setmaster(ci, true, "", ci->authname, ci->authdesc, priv, false, false, !connecting);
 }
 
 void authchallenged(int m, uint id, const char *val, const char *desc = "")
@@ -105,13 +110,14 @@ bool answerchallenge(clientinfo *ci, uint id, char *val, const char *desc)
             userinfo *u = users.access(userkey(ci->authname, ci->authdesc));
             if(u)
             {
-                if(ci->connectauth) connected(ci);
+                bool connecting = false;
+                if(ci->connectauth) { connected(ci); connecting = true; }
                 if(ci->authkickvictim >= 0)
                 {
-                    if(setmaster(ci, true, "", ci->authname, ci->authdesc, u->privilege, false, true))
+                    if(setmaster(ci, true, "", ci->authname, ci->authdesc, u->privilege, false, true, !connecting))
                         trykick(ci, ci->authkickvictim, ci->authkickreason, ci->authname, ci->authdesc, u->privilege);
                 }
-                else setmaster(ci, true, "", ci->authname, ci->authdesc, u->privilege, false, false);
+                else setmaster(ci, true, "", ci->authname, ci->authdesc, u->privilege, false, false, !connecting);
             }
         }
         ci->cleanauth();
@@ -127,7 +133,7 @@ bool answerchallenge(clientinfo *ci, uint id, char *val, const char *desc)
         if(ci->authmaster < 0)
         {
             ci->cleanauth();
-            if(!desc[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, "not connected to authentication server");
+            if(!ci->authdesc[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, "not connected to authentication server");
         }
     }
     return ci->authreq || !ci->connectauth;
@@ -140,11 +146,11 @@ void masterconnected(int m)
 
 void masterdisconnected(int m)
 {
-    if(m < 0) { cleargbans(-1); return; }
+    if(m < 0) cleargbans(-1);
     loopvrev(clients)
     {
         clientinfo *ci = clients[i];
-        if(ci->authmaster == m && ci->authreq) authfailed(ci);
+        if(ci->authreq && (m >= 0 ? ci->authmaster == m : ci->authmaster >= 0)) authfailed(ci);
     }
 }
 
@@ -162,6 +168,16 @@ void processmasterinput(int m, const char *cmd, int cmdlen, const char *args)
         cleargbans(m);
     else if(sscanf(cmd, "addgban %100s", val) == 1)
         addgban(m, val);
+    else if(sscanf(cmd, "z_priv %100s", val) == 1)
+    {
+        switch(val[0])
+        {
+            case '0': case 'n': case 'N': masterauthpriv_set(m, PRIV_NONE); break;
+            case '1': case 'c': case 'C': masterauthpriv_set(m, PRIV_MASTER); break;
+            case '2': case 'm': case 'M': default: masterauthpriv_set(m, PRIV_AUTH); break;
+            case '3': case 'a': case 'A': masterauthpriv_set(m, PRIV_ADMIN); break;
+        }
+    }
 }
 
 #endif // Z_MS_GAMESERVER_OVERRIDE_H

@@ -17,7 +17,7 @@ static void z_trigger_defaultmastermode(int type)
 }
 Z_TRIGGER(z_trigger_defaultmastermode, Z_TRIGGER_STARTUP);
 
-bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *authname = NULL, const char *authdesc = NULL, int authpriv = PRIV_MASTER, bool force = false, bool trial = false)
+bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *authname = NULL, const char *authdesc = NULL, int authpriv = PRIV_MASTER, bool force = false, bool trial = false, bool verbose = true)
 {
     if(authname && !val) return false;
     const char *name = "";
@@ -35,17 +35,17 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
         {
             if(ci->state.state==CS_SPECTATOR)
             {
-                sendf(ci->clientnum, 1, "ris", N_SERVMSG, "Spectators may not claim master.");
+                if(verbose) sendf(ci->clientnum, 1, "ris", N_SERVMSG, "Spectators may not claim master.");
                 return false;
             }
             if(!authname && !(mastermask&MM_AUTOAPPROVE) && !ci->privilege && !ci->local)
             {
-                sendf(ci->clientnum, 1, "ris", N_SERVMSG, "This server requires you to use the \"/auth\" command to claim master.");
+                if(verbose) sendf(ci->clientnum, 1, "ris", N_SERVMSG, "This server requires you to use the \"/auth\" command to claim master.");
                 return false;
             }
             loopv(clients) if(ci!=clients[i] && clients[i]->privilege)
             {
-                sendf(ci->clientnum, 1, "ris", N_SERVMSG, "Master is already claimed.");
+                if(verbose) sendf(ci->clientnum, 1, "ris", N_SERVMSG, "Master is already claimed.");
                 return false;
             }
         }
@@ -77,14 +77,14 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
         else formatstring(msg, "%s claimed %s%s as '\fs\f5%s\fr'", colorname(ci), inv_ ? "invisible " : "", name, authname);
     }
     else formatstring(msg, "%s %s %s%s", colorname(ci), val ? "claimed" : "relinquished", inv_ ? "invisible " : "", name);
-    
+
     if(val && authname)
     {
         if(authdesc) logoutf("master: %s (%d) claimed %s as '%s' [%s]", ci->name, ci->clientnum, name, authname, authdesc);
         else logoutf("master: %s (%d) claimed %s as '%s'", ci->name, ci->clientnum, name, authname);
     }
     else logoutf("master: %s (%d) %s %s", ci->name, ci->clientnum, val ? "claimed" : "relinquished", name);
-    
+
     for(int i = demorecord ? -1 : 0; i < clients.length(); i++)
     {
         clientinfo *cj = i >= 0 ? clients[i] : NULL;
@@ -137,7 +137,7 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
             else { p.finalize(); recordpacket(1, p.packet->data, p.packet->dataLength); }
         }
     }
-    
+
     checkpausegame();
     return true;
 }
@@ -171,7 +171,7 @@ void z_servcmd_invpriv(int argc, char **argv, int sender)
     }
     else sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("invpriv is %s", ci->invpriv ? "enabled" : "disabled"));
 }
-SCOMMANDNA(invpriv, PRIV_NONE, z_servcmd_invpriv, 1);
-SCOMMANDNAH(hidepriv, PRIV_NONE, z_servcmd_invpriv, 1);
+SCOMMANDA(invpriv, PRIV_NONE, z_servcmd_invpriv, 1);
+SCOMMANDAH(hidepriv, PRIV_NONE, z_servcmd_invpriv, 1);
 
 #endif // Z_SETMASTER_OVERRIDE
