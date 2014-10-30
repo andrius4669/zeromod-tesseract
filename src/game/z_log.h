@@ -106,19 +106,22 @@ static void z_discmsg(clientinfo *ci, int n, const char *msg, bool forced)
             z_discmsg_print(s, NULL, n, msg, false);
             sendservmsg(s);
         }
-        else loopv(clients) if(clients[i]->state.aitype==AI_NONE)
+        else
         {
             string sp;
             *s = *sp = 0;
-            if(clients[i]->local || clients[i]->privilege>=PRIV_ADMIN)
+            loopv(clients) if(clients[i]->state.aitype==AI_NONE)
             {
-                if(!*s) z_discmsg_print(s, NULL, n, msg, false);
-                sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, s);
-            }
-            else if(discmsg_verbose>=2)
-            {
-                if(!*sp) z_discmsg_print(sp, NULL, n, msg, true);
-                sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, sp);
+                if(clients[i]->local || clients[i]->privilege>=PRIV_ADMIN)
+                {
+                    if(!*s) z_discmsg_print(s, NULL, n, msg, false);
+                    sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, s);
+                }
+                else if(discmsg_verbose>=2)
+                {
+                    if(!*sp) z_discmsg_print(sp, NULL, n, msg, true);
+                    sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, sp);
+                }
             }
         }
     }
