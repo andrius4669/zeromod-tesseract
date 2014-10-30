@@ -2551,7 +2551,6 @@ namespace server
     {
         clientinfo *ci = getinfo(n);
         const char *msg = disconnectreason(reason);
-        string s;
         loopv(clients) if(clients[i]->authkickvictim == ci->clientnum) clients[i]->cleanauth();
         if(ci->connected)
         {
@@ -2565,23 +2564,9 @@ namespace server
             if(!numclients(-1, false, true) && !numspies(-1, false, true)) noclients(); // bans clear when server empties
             if(ci->local) checkpausegame();
             logoutf("disconnect: %s (%d) left", ci->name, ci->clientnum);
-            if(forced)
-            {
-                if(msg) formatstring(s, "client %s (%s) disconnected because: %s", colorname(ci), getclienthostname(n), msg);
-                else formatstring(s, "client %s (%s) disconnected", colorname(ci), getclienthostname(n));
-                sendservmsg(s);
-            }
         }
-        else
-        {
-            connects.removeobj(ci);
-            if(forced)
-            {
-                if(msg) formatstring(s, "client (%s) disconnected because: %s", getclienthostname(n), msg);
-                else formatstring(s, "client (%s) disconnected", getclienthostname(n));
-                sendservmsg(s);
-            }
-        }
+        else connects.removeobj(ci);
+        z_discmsg(ci, n, msg, forced);
         if(forced)
         {
             if(msg) logoutf("disconnect: client %d (%s) disconnected by server because: %s", n, getclienthostname(n), msg);
