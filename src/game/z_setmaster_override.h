@@ -3,6 +3,7 @@
 
 #include "z_triggers.h"
 #include "z_servercommands.h"
+#include "z_log.h"
 
 VAR(defaultmastermode, -1, 0, 3);
 SVAR(masterpass, "");
@@ -17,16 +18,19 @@ static void z_trigger_defaultmastermode(int type)
 }
 Z_TRIGGER(z_trigger_defaultmastermode, Z_TRIGGER_STARTUP);
 
-bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *authname = NULL, const char *authdesc = NULL, int authpriv = PRIV_MASTER, bool force = false, bool trial = false, bool verbose = true)
+bool setmaster(clientinfo *ci, bool val, const char *pass = "",
+               const char *authname = NULL, const char *authdesc = NULL, int authpriv = PRIV_MASTER,
+               bool force = false, bool trial = false, bool verbose = true, clientinfo *by = NULL)
 {
     if(authname && !val) return false;
     const char *name = "";
     const int opriv = ci->privilege;
+    bool haspass = false;
     if(val)
     {
-        bool haspass = adminpass[0] && checkpassword(ci, adminpass, pass);
+        haspass = adminpass[0] && checkpassword(ci, adminpass, pass);
         int wantpriv = ci->local || haspass ? PRIV_ADMIN : authpriv;
-        if(!force && wantpriv <= PRIV_MASTER && masterpass[0] && checkpassword(ci, masterpass, pass)) force = true;
+        if(!force && wantpriv <= PRIV_MASTER && masterpass[0] && checkpassword(ci, masterpass, pass)) { force = true; haspass = true; }
         if(ci->privilege)
         {
             if(wantpriv <= ci->privilege) return true;
@@ -78,12 +82,7 @@ bool setmaster(clientinfo *ci, bool val, const char *pass = "", const char *auth
     }
     else formatstring(msg, "%s %s %s%s", colorname(ci), val ? "claimed" : "relinquished", inv_ ? "invisible " : "", name);
 
-    if(val && authname)
-    {
-        if(authdesc) logoutf("master: %s (%d) claimed %s as '%s' [%s]", ci->name, ci->clientnum, name, authname, authdesc);
-        else logoutf("master: %s (%d) claimed %s as '%s'", ci->name, ci->clientnum, name, authname);
-    }
-    else logoutf("master: %s (%d) %s %s", ci->name, ci->clientnum, val ? "claimed" : "relinquished", name);
+    z_log_setmaster(ci, val, haspass, authname, authdesc, name, by);
 
     for(int i = demorecord ? -1 : 0; i < clients.length(); i++)
     {

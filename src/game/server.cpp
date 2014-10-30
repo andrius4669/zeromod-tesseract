@@ -1313,14 +1313,16 @@ namespace server
         u.pubkey = parsepubkey(pubkey);
         switch(priv[0])
         {
-            case 'a': case 'A': u.privilege = PRIV_ADMIN; break;
+            case 'n': case 'N': case '0': u.privilege = PRIV_NONE; break;
+            case 'c': case 'C': case '1': u.privilege = PRIV_MASTER; break;
+            case 'a': case 'A': case '3': u.privilege = PRIV_ADMIN; break;
             case 'm': case 'M': default: u.privilege = PRIV_AUTH; break;
         }
     }
-    ICOMMAND(adduser, "ssssN", (char *s1, char *s2, char *s3, char *s4, int *n),
+    ICOMMAND(adduser, "ssssN", (char *name, char *desc, char *pubkey, char *priv, int *n),
     {
-        if(*n > 2) adduser(s1, s2, s3, s4);
-        else adduser(s1, (char *)"", s2, (char *)"");
+        if(*n > 2) adduser(name, desc, pubkey, priv);
+        else adduser(name, (char *)"", desc, (char *)"");
     });
 
     void clearusers()
@@ -1426,6 +1428,7 @@ namespace server
     }
 #endif
 
+    #include "z_log.h"
     bool trykick(clientinfo *ci, int victim, const char *reason = NULL, const char *authname = NULL, const char *authdesc = NULL, int authpriv = PRIV_NONE, bool trial = false)
     {
         int priv = ci->privilege;
@@ -1449,6 +1452,7 @@ namespace server
                 else copystring(kicker, colorname(ci));
                 if(reason && reason[0]) sendservmsgf("%s kicked %s because: %s", kicker, colorname(vinfo), reason);
                 else sendservmsgf("%s kicked %s", kicker, colorname(vinfo));
+                z_log_kick(ci, authname, authdesc, authpriv, vinfo, reason);
                 uint ip = getclientip(victim);
                 addban(ip, 4*60*60000);
                 kickclients(ip, ci, priv);
@@ -3511,8 +3515,8 @@ namespace server
                 {
                     if(!ci->privilege && !ci->local) break;
                     clientinfo *minfo = (clientinfo *)getclientinfo(mn);
-                    if(!minfo || !minfo->connected || (!ci->local && minfo->privilege >= ci->privilege) || (val && minfo->privilege)) break;
-                    setmaster(minfo, val!=0, "", NULL, NULL, PRIV_MASTER, true);
+                    if(!minfo || !minfo->connected || (!ci->local && minfo->privilege > ci->privilege)) break;
+                    setmaster(minfo, val!=0, "", NULL, NULL, clamp(val, int(PRIV_MASTER), ci->privilege), true, false, false, ci);
                 }
                 else setmaster(ci, val!=0, text);
                 // don't broadcast the master password

@@ -483,9 +483,9 @@ game/server.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/server.o: shared/ents.h shared/command.h shared/glexts.h shared/glemu.h
 game/server.o: shared/iengine.h shared/igame.h game/ai.h game/z_geoipstate.h
 game/server.o: game/z_triggers.h game/ctf.h game/z_setmaster_override.h
-game/server.o: game/z_servercommands.h game/z_awards.h game/z_nodamage.h
-game/server.o: game/z_announcekills.h game/z_autosendmap.h game/z_sendmap.h
-game/server.o: game/z_servcmd.h game/z_gbans_override.h
+game/server.o: game/z_servercommands.h game/z_log.h game/z_awards.h
+game/server.o: game/z_nodamage.h game/z_announcekills.h game/z_autosendmap.h
+game/server.o: game/z_sendmap.h game/z_servcmd.h game/z_gbans_override.h
 game/server.o: game/z_ms_gameserver_override.h game/z_geoip.h
 game/server.o: game/z_geoipserver.h game/z_msgfilter.h game/z_rename.h
 game/server.o: game/extinfo.h game/aiman.h game/z_genericservercommands.h
@@ -536,7 +536,7 @@ standalone/game/server.o: shared/geom.h shared/ents.h shared/command.h
 standalone/game/server.o: shared/iengine.h shared/igame.h game/ai.h
 standalone/game/server.o: game/z_geoipstate.h game/z_triggers.h game/ctf.h
 standalone/game/server.o: game/z_setmaster_override.h game/z_servercommands.h
-standalone/game/server.o: game/z_awards.h game/z_nodamage.h
+standalone/game/server.o: game/z_log.h game/z_awards.h game/z_nodamage.h
 standalone/game/server.o: game/z_announcekills.h game/z_autosendmap.h
 standalone/game/server.o: game/z_sendmap.h game/z_servcmd.h
 standalone/game/server.o: game/z_gbans_override.h
