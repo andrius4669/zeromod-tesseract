@@ -1489,19 +1489,39 @@ extern int smminradius;
 
 struct lightinfo
 {
-    float sx1, sy1, sx2, sy2, sz1, sz2;
     int ent, shadowmap, flags;
     vec o, color;
-    float radius;
+    float radius, dist;
     vec dir, spotx, spoty;
     int spot;
-    float dist;
+    float sx1, sy1, sx2, sy2, sz1, sz2;
     occludequery *query;
-
-    void calcspot(const vec &spotdir, int spotangle)
+    
+    lightinfo() {}
+    lightinfo(const vec &o, const vec &color, float radius, int flags = 0, const vec &dir = vec(0, 0, 0), int spot = 0)
+      : ent(-1), shadowmap(-1), flags(flags),
+        o(o), color(color), radius(radius), dist(camera1->o.dist(o)),
+        dir(dir), spot(spot), query(NULL)
     {
-        dir = spotdir;
-        spot = spotangle;
+        if(spot > 0) calcspot();
+        calcscissor();
+    }
+    lightinfo(int i, const extentity &e)
+      : ent(i), shadowmap(-1), flags(e.attr5),
+        o(e.o), color(vec(e.attr2, e.attr3, e.attr4).max(0)), radius(e.attr1), dist(camera1->o.dist(e.o)),
+        dir(0, 0, 0), spot(0), query(NULL)
+    {
+        if(e.attached && e.attached->type == ET_SPOTLIGHT)
+        {
+            dir = vec(e.attached->o).sub(e.o).normalize();
+            spot = clamp(int(e.attached->attr1), 1, 89);
+            calcspot();
+        }
+        calcscissor();
+    }
+        
+    void calcspot()
+    {
         quat orient(dir, vec(0, 0, dir.z < 0 ? -1 : 1));
         spotx = orient.invertedrotate(vec(1, 0, 0));
         spoty = orient.invertedrotate(vec(0, 1, 0));
@@ -1509,17 +1529,51 @@ struct lightinfo
 
     bool noshadow() const { return flags&L_NOSHADOW || radius <= smminradius; }
 
-    void addscissor(float &dx1, float &dy1, float &dx2, float &dy2, float &dz1, float &dz2) const
+    void addscissor(float &dx1, float &dy1, float &dx2, float &dy2) const
     {
         dx1 = min(dx1, sx1);
         dy1 = min(dy1, sy1);
         dx2 = max(dx2, sx2);
         dy2 = max(dy2, sy2);
+    }
+
+    void addscissor(float &dx1, float &dy1, float &dx2, float &dy2, float &dz1, float &dz2) const
+    {
+        addscissor(dx1, dy1, dx2, dy2);
         dz1 = min(dz1, sz1);
         dz2 = max(dz2, sz2);
     }
 
+    bool validscissor() const { return sx1 < sx2 && sy1 < sy2 && sz1 < sz2; }
+
+    void calcscissor()
+    {
+        sx1 = sy1 = sz1 = -1;
+        sx2 = sy2 = sz2 = 1;
+        if(spot > 0) calcspotscissor(o, radius, dir, spot, spotx, spoty, sx1, sy1, sx2, sy2, sz1, sz2);
+        else calcspherescissor(o, radius, sx1, sy1, sx2, sy2, sz1, sz2);
+    }
+
     bool checkquery() const { return query && query->owner == this && ::checkquery(query); }
+
+    void calcbb(vec &bbmin, vec &bbmax)
+    {
+        if(spot > 0)
+        {
+            float spotscale = radius * tan360(spot);
+            vec up = vec(spotx).mul(spotscale).abs(), right = vec(spoty).mul(spotscale).abs(), center = vec(dir).mul(radius).add(o);
+            bbmin = bbmax = center;
+            bbmin.sub(up).sub(right);
+            bbmax.add(up).add(right);
+            bbmin.min(o);
+            bbmax.max(o);
+        }
+        else
+        {
+            bbmin = vec(o).sub(radius);
+            bbmax = vec(o).add(radius);
+        }
+    }
 };
 
 struct shadowcachekey
@@ -2138,9 +2192,9 @@ struct radiancehints
         float nearplane, farplane;
         vec offset, scale;
         vec center; float bounds;
-        vec cached;
+        vec cached; bool copied;
 
-        splitinfo() : center(-1e16f, -1e16f, -1e16f), bounds(-1e16f), cached(-1e16f, -1e16f, -1e16f) {}
+        splitinfo() : center(-1e16f, -1e16f, -1e16f), bounds(-1e16f), cached(-1e16f, -1e16f, -1e16f), copied(false) {}
 
         void clearcache() { bounds = -1e16f; }
     } splits[RH_MAXSPLITS];
@@ -2370,23 +2424,25 @@ Shader *loaddeferredlightshader(const char *type = NULL)
         copystring(common, type);
         commonlen = strlen(common);
     }
-    if(lighttilebatch)
+    if(!minimap)
     {
-        common[commonlen++] = 'n';
-        common[commonlen++] = '0' + lighttilebatch;
+        common[commonlen++] = 't';
+        if(useavatarmask()) common[commonlen++] = 'd';
+        if(lighttilebatch)
+        {
+            common[commonlen++] = 'n';
+            common[commonlen++] = '0' + lighttilebatch;
+        }
     }
     if(usegatherforsm()) common[commonlen++] = smfilter > 2 ? 'G' : 'g';
     else if(smfilter) common[commonlen++] = smfilter > 2 ? 'E' : (smfilter > 1 ? 'F' : 'f');
     if(spotlights || forcespotlights) common[commonlen++] = 's';
-    if(!minimap) common[commonlen++] = 't';
-    if(useavatarmask()) common[commonlen++] = 'd';
     common[commonlen] = '\0';
 
     shadow[shadowlen++] = 'p';
     shadow[shadowlen] = '\0';
 
     int usecsm = 0, userh = 0;
-    if(!minimap && ao) sun[sunlen++] = 'a';
     if(!sunlight.iszero() && csmshadowmap)
     {
         usecsm = csmsplits;
@@ -2403,11 +2459,15 @@ Shader *loaddeferredlightshader(const char *type = NULL)
             }
         }
     }
-    if(lighttilebatch && (!usecsm || batchsunlight > (userh ? 1 : 0))) sun[sunlen++] = 'b';
+    if(!minimap) 
+    { 
+        if(ao) sun[sunlen++] = 'a';
+        if(lighttilebatch && (!usecsm || batchsunlight > (userh ? 1 : 0))) sun[sunlen++] = 'b';
+    }
     sun[sunlen] = '\0';
 
     defformatstring(name, "deferredlight%s%s%s", common, shadow, sun);
-    return generateshader(name, "deferredlightshader \"%s\" \"%s\" \"%s\" %d %d %d", common, shadow, sun, usecsm, userh, lighttilebatch);
+    return generateshader(name, "deferredlightshader \"%s\" \"%s\" \"%s\" %d %d %d", common, shadow, sun, usecsm, userh, !minimap ? lighttilebatch : 0);
 }
 
 void loaddeferredlightshaders()
@@ -2490,62 +2550,92 @@ void resetlights()
     calctilesize();
 }
 
-static vec *lightsphereverts = NULL;
-static GLushort *lightsphereindices = NULL;
-static int lightspherenumverts = 0, lightspherenumindices = 0;
-static GLuint lightspherevbuf = 0, lightsphereebuf = 0;
-
-static void initlightsphere(int slices, int stacks)
+namespace lightsphere
 {
-    lightspherenumverts = (stacks+1)*(slices+1);
-    lightsphereverts = new vec[lightspherenumverts];
-    float ds = 1.0f/slices, dt = 1.0f/stacks, t = 1.0f;
-    loopi(stacks+1)
+    vec *verts = NULL;
+    GLushort *indices = NULL;
+    int numverts = 0, numindices = 0;
+    GLuint vbuf = 0, ebuf = 0;
+
+    void init(int slices, int stacks)
     {
-        float rho = M_PI*(1-t), s = 0.0f;
-        loopj(slices+1)
+        numverts = (stacks+1)*(slices+1);
+        verts = new vec[numverts];
+        float ds = 1.0f/slices, dt = 1.0f/stacks, t = 1.0f;
+        loopi(stacks+1)
         {
-            float theta = j==slices ? 0 : 2*M_PI*s;
-            lightsphereverts[i*(slices+1) + j] = vec(-sin(theta)*sin(rho), -cos(theta)*sin(rho), cos(rho));
-            s += ds;
+            float rho = M_PI*(1-t), s = 0.0f, sinrho = i && i < stacks ? sin(rho) : 0, cosrho = !i ? 1 : (i < stacks ? cos(rho) : -1);
+            loopj(slices+1)
+            {
+                float theta = j==slices ? 0 : 2*M_PI*s;
+                verts[i*(slices+1) + j] = vec(-sin(theta)*sinrho, -cos(theta)*sinrho, cosrho);
+                s += ds;
+            }
+            t -= dt;
         }
-        t -= dt;
+
+        numindices = (stacks-1)*slices*3*2;
+        indices = new ushort[numindices];
+        GLushort *curindex = indices;
+        loopi(stacks)
+        {
+            loopk(slices)
+            {
+                int j = i%2 ? slices-k-1 : k;
+                if(i)
+                {
+                    *curindex++ = i*(slices+1)+j;
+                    *curindex++ = i*(slices+1)+j+1;
+                    *curindex++ = (i+1)*(slices+1)+j;
+                }
+                if(i+1 < stacks)
+                {
+                    *curindex++ = i*(slices+1)+j+1;
+                    *curindex++ = (i+1)*(slices+1)+j+1;
+                    *curindex++ = (i+1)*(slices+1)+j;
+                }
+            }
+        }
+
+        if(!vbuf) glGenBuffers_(1, &vbuf);
+        glBindBuffer_(GL_ARRAY_BUFFER, vbuf);
+        glBufferData_(GL_ARRAY_BUFFER, numverts*sizeof(vec), verts, GL_STATIC_DRAW);
+        DELETEA(verts);
+
+        if(!ebuf) glGenBuffers_(1, &ebuf);
+        glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, ebuf);
+        glBufferData_(GL_ELEMENT_ARRAY_BUFFER, numindices*sizeof(GLushort), indices, GL_STATIC_DRAW);
+        DELETEA(indices);
     }
 
-    lightspherenumindices = stacks*slices*3*2;
-    lightsphereindices = new ushort[lightspherenumindices];
-    GLushort *curindex = lightsphereindices;
-    loopi(stacks)
+    void cleanup()
     {
-        loopk(slices)
-        {
-            int j = i%2 ? slices-k-1 : k;
-
-            *curindex++ = i*(slices+1)+j;
-            *curindex++ = i*(slices+1)+j+1;
-            *curindex++ = (i+1)*(slices+1)+j;
-
-            *curindex++ = i*(slices+1)+j+1;
-            *curindex++ = (i+1)*(slices+1)+j+1;
-            *curindex++ = (i+1)*(slices+1)+j;
-        }
+        if(vbuf) { glDeleteBuffers_(1, &vbuf); vbuf = 0; }
+        if(ebuf) { glDeleteBuffers_(1, &ebuf); ebuf = 0; }
     }
 
-    if(!lightspherevbuf) glGenBuffers_(1, &lightspherevbuf);
-    glBindBuffer_(GL_ARRAY_BUFFER, lightspherevbuf);
-    glBufferData_(GL_ARRAY_BUFFER, lightspherenumverts*sizeof(vec), lightsphereverts, GL_STATIC_DRAW);
-    DELETEA(lightsphereverts);
+    void enable()
+    {
+        if(!vbuf) init(8, 4);
+        glBindBuffer_(GL_ARRAY_BUFFER, vbuf);
+        glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, ebuf);
+        gle::vertexpointer(sizeof(vec), verts);
+        gle::enablevertex();
+    }
 
-    if(!lightsphereebuf) glGenBuffers_(1, &lightsphereebuf);
-    glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, lightsphereebuf);
-    glBufferData_(GL_ELEMENT_ARRAY_BUFFER, lightspherenumindices*sizeof(GLushort), lightsphereindices, GL_STATIC_DRAW);
-    DELETEA(lightsphereindices);
-}
-
-void cleanuplightsphere()
-{
-    if(lightspherevbuf) { glDeleteBuffers_(1, &lightspherevbuf); lightspherevbuf = 0; }
-    if(lightsphereebuf) { glDeleteBuffers_(1, &lightsphereebuf); lightsphereebuf = 0; }
+    void draw()
+    {
+        glDrawRangeElements_(GL_TRIANGLES, 0, numverts-1, numindices, GL_UNSIGNED_SHORT, indices);
+        xtraverts += numindices;
+        glde++;
+    }
+    
+    void disable()
+    {
+        gle::disablevertex();
+        glBindBuffer_(GL_ARRAY_BUFFER, 0);
+        glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, 0);
+    }
 }
 
 VAR(depthtestlights, 0, 2, 2);
@@ -2692,17 +2782,17 @@ static inline void setlightparams(int i, const lightinfo &l)
 {
     lightposv[i] = vec4(l.o, 1).div(l.radius);
     lightcolorv[i] = vec(l.color).mul(2*ldrscaleb);
-    if(l.spot > 0) spotparamsv[i] = vec4(l.dir, 1/(1 - cos360(l.spot)));
+    if(l.spot > 0) spotparamsv[i] = vec4(vec(l.dir).neg(), 1/(1 - cos360(l.spot)));
     if(l.shadowmap >= 0)
     {
         shadowmapinfo &sm = shadowmaps[l.shadowmap];
         float smnearclip = SQRT3 / l.radius, smfarclip = SQRT3,
-              bias = (smfilter > 2 || smsize > 12 ? smbias2 : smbias) * (smcullside ? 1 : -1) * smnearclip * (1024.0f / sm.size);
+              bias = (smfilter > 2 || shadowatlaspacker.w > SHADOWATLAS_SIZE ? smbias2 : smbias) * (smcullside ? 1 : -1) * smnearclip * (1024.0f / sm.size);
         int border = smfilter > 2 ? smborder2 : smborder;
         if(l.spot > 0)
         {
             shadowparamsv[i] = vec4(
-                0.5f * sm.size * cotan360(l.spot),
+                -0.5f * sm.size * cotan360(l.spot),
                 (-smnearclip * smfarclip / (smfarclip - smnearclip) - 0.5f*bias),
                 1 / (1 + fabs(l.dir.z)),
                 0.5f + 0.5f * (smfarclip + smnearclip) / (smfarclip - smnearclip));
@@ -2710,7 +2800,7 @@ static inline void setlightparams(int i, const lightinfo &l)
         else
         {
             shadowparamsv[i] = vec4(
-                0.5f * (sm.size - border),
+                -0.5f * (sm.size - border),
                 -smnearclip * smfarclip / (smfarclip - smnearclip) - 0.5f*bias,
                 sm.size,
                 0.5f + 0.5f * (smfarclip + smnearclip) / (smfarclip - smnearclip));
@@ -2761,11 +2851,7 @@ static void rendersunpass(Shader *s, int stencilref, bool transparent, float bsx
 
 static void renderlightsnobatch(Shader *s, int stencilref, bool transparent, float bsx1, float bsy1, float bsx2, float bsy2)
 {
-    if(!lightspherevbuf) initlightsphere(8, 4);
-    glBindBuffer_(GL_ARRAY_BUFFER, lightspherevbuf);
-    glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, lightsphereebuf);
-    gle::vertexpointer(sizeof(vec), lightsphereverts);
-    gle::enablevertex();
+    lightsphere::enable();
 
     glEnable(GL_SCISSOR_TEST);
 
@@ -2811,9 +2897,7 @@ static void renderlightsnobatch(Shader *s, int stencilref, bool transparent, flo
                 glCullFace(GL_BACK);
             }
 
-            glDrawRangeElements_(GL_TRIANGLES, 0, lightspherenumverts-1, lightspherenumindices, GL_UNSIGNED_SHORT, lightsphereindices);
-            xtraverts += lightspherenumindices;
-            glde++;
+            lightsphere::draw();
 
             lightpassesused++;
         }
@@ -2830,9 +2914,7 @@ static void renderlightsnobatch(Shader *s, int stencilref, bool transparent, flo
 
     glDisable(GL_SCISSOR_TEST);
 
-    gle::disablevertex();
-    glBindBuffer_(GL_ARRAY_BUFFER, 0);
-    glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, 0);
+    lightsphere::disable();
 }
 
 static void renderlightbatches(Shader *s, int stencilref, bool transparent, float bsx1, float bsy1, float bsx2, float bsy2, const uint *tilemask)
@@ -3002,7 +3084,7 @@ void renderlights(float bsx1 = -1, float bsy1 = -1, float bsx2 = 1, float bsy2 =
 
     if(hasDBT && depthtestlights > 1) glEnable(GL_DEPTH_BOUNDS_TEST_EXT);
 
-    bool sunpass = !lighttilebatch || (!sunlight.iszero() && csmshadowmap && batchsunlight <= (gi && giscale && gidist ? 1 : 0));
+    bool sunpass = !lighttilebatch || drawtex == DRAWTEX_MINIMAP || (!sunlight.iszero() && csmshadowmap && batchsunlight <= (gi && giscale && gidist ? 1 : 0));
     if(sunpass)
     {
         if(depthtestlights && depth) { glDisable(GL_DEPTH_TEST); depth = false; }
@@ -3011,7 +3093,7 @@ void renderlights(float bsx1 = -1, float bsy1 = -1, float bsx2 = 1, float bsy2 =
 
     if(depthtestlights && !depth) { glEnable(GL_DEPTH_TEST); depth = true; }
 
-    if(!lighttilebatch)
+    if(!lighttilebatch || drawtex == DRAWTEX_MINIMAP)
     {
         gle::disable();
         renderlightsnobatch(s, stencilref, transparent, bsx1, bsy1, bsx2, bsy2);
@@ -3053,12 +3135,9 @@ void rendervolumetric()
     loopv(lightorder)
     {
         const lightinfo &l = lights[lightorder[i]];
-        if(!(l.flags&L_VOLUMETRIC) || l.sx1 >= l.sx2 || l.sy1 >= l.sy2 || l.sz1 >= l.sz2) continue;
+        if(!(l.flags&L_VOLUMETRIC) || l.checkquery()) continue;
         
-        bsx1 = min(bsx1, l.sx1);
-        bsx2 = max(bsx2, l.sx2);
-        bsy1 = min(bsy1, l.sy1);
-        bsy2 = max(bsy2, l.sy2);
+        l.addscissor(bsx1, bsy1, bsx2, bsy2);
     }
     if(bsx1 >= bsx2 || bsy1 >= bsy2) return;
 
@@ -3090,11 +3169,7 @@ void rendervolumetric()
     if(!depthtestlights) glDisable(GL_DEPTH_TEST);
     else glDepthMask(GL_FALSE);
 
-    if(!lightspherevbuf) initlightsphere(8, 4);
-    glBindBuffer_(GL_ARRAY_BUFFER, lightspherevbuf);
-    glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, lightsphereebuf);
-    gle::vertexpointer(sizeof(vec), lightsphereverts);
-    gle::enablevertex();
+    lightsphere::enable();
 
     glEnable(GL_SCISSOR_TEST);
 
@@ -3102,7 +3177,7 @@ void rendervolumetric()
     loopv(lightorder)
     {
         const lightinfo &l = lights[lightorder[i]];
-        if(!(l.flags&L_VOLUMETRIC) || l.sx1 >= l.sx2 || l.sy1 >= l.sy2 || l.sz1 >= l.sz2) continue;
+        if(!(l.flags&L_VOLUMETRIC) || l.checkquery()) continue;
 
         matrix4 lightmatrix = camprojmatrix;
         lightmatrix.translate(l.o);
@@ -3166,9 +3241,7 @@ void rendervolumetric()
             glCullFace(GL_BACK);
         }
 
-        glDrawRangeElements_(GL_TRIANGLES, 0, lightspherenumverts-1, lightspherenumindices, GL_UNSIGNED_SHORT, lightsphereindices);
-        xtraverts += lightspherenumindices;
-        glde++;
+        lightsphere::draw();
     }
     
     if(!outside)
@@ -3177,9 +3250,7 @@ void rendervolumetric()
         glCullFace(GL_BACK);
     }
 
-    gle::disablevertex();
-    glBindBuffer_(GL_ARRAY_BUFFER, 0);
-    glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, 0);
+    lightsphere::disable();
 
     if(depthtestlights)
     {
@@ -3268,6 +3339,7 @@ void rendervolumetric()
     endtimer(voltimer);
 }
 
+VAR(oqvol, 0, 1, 1);
 VAR(oqlights, 0, 1, 1);
 VAR(debuglightscissor, 0, 0, 1);
 
@@ -3284,7 +3356,7 @@ void viewlightscissor()
             loopvj(lights) if(lights[j].o == e.o)
             {
                 lightinfo &l = lights[j];
-                if(l.sx1 >= l.sx2 || l.sy1 >= l.sy2 || l.sz1 >= l.sz2) break;
+                if(!l.validscissor()) break;
                 gle::colorf(l.color.x/255, l.color.y/255, l.color.z/255);
                 float x1 = (l.sx1+1)/2*hudw, x2 = (l.sx2+1)/2*hudw,
                       y1 = (1-l.sy1)/2*hudh, y2 = (1-l.sy2)/2*hudh;
@@ -3300,20 +3372,6 @@ void viewlightscissor()
     gle::disable();
 }
 
-static inline bool calclightscissor(lightinfo &l)
-{
-    float sx1 = -1, sy1 = -1, sx2 = 1, sy2 = 1, sz1 = -1, sz2 = 1;
-    if(l.spot > 0) calcspotscissor(l.o, l.radius, l.dir, l.spot, l.spotx, l.spoty, sx1, sy1, sx2, sy2, sz1, sz2);
-    else calcspherescissor(l.o, l.radius, sx1, sy1, sx2, sy2, sz1, sz2);
-    l.sx1 = sx1;
-    l.sx2 = sx2;
-    l.sy1 = sy1;
-    l.sy2 = sy2;
-    l.sz1 = sz1;
-    l.sz2 = sz2;
-    return sx1 < sx2 && sy1 < sy2 && sz1 < sz2;
-}
-
 void collectlights()
 {
     if(lights.length()) return;
@@ -3322,7 +3380,7 @@ void collectlights()
     const vector<extentity *> &ents = entities::getents();
     if(!editmode || !fullbright) loopv(ents)
     {
-        extentity *e = ents[i];
+        const extentity *e = ents[i];
         if(e->type != ET_LIGHT || e->attr1 <= 0) continue;
 
         if(smviscull)
@@ -3331,26 +3389,8 @@ void collectlights()
             if(pvsoccludedsphere(e->o, e->attr1)) continue;
         }
 
-        lightinfo &l = lights.add();
-        l.ent = i;
-        l.shadowmap = -1;
-        l.flags = e->attr5;
-        l.query = NULL;
-        l.o = e->o;
-        l.color = vec(e->attr2, e->attr3, e->attr4).max(0);
-        l.radius = e->attr1;
-        if(e->attached && e->attached->type == ET_SPOTLIGHT)
-        {
-            l.calcspot(vec(e->attached->o).sub(e->o).normalize(), clamp(int(e->attached->attr1), 1, 89));
-        }
-        else
-        {
-            l.dir = vec(0, 0, 0);
-            l.spot = 0;
-        }
-        l.dist = camera1->o.dist(e->o);
-
-        if(calclightscissor(l)) lightorder.add(lights.length()-1);
+        lightinfo &l = lights.add(lightinfo(i, *e));
+        if(l.validscissor()) lightorder.add(lights.length()-1);
     }
 
     int numdynlights = 0;
@@ -3366,26 +3406,8 @@ void collectlights()
         int spot, flags;
         if(!getdynlight(i, o, radius, color, dir, spot, flags)) continue;
 
-        lightinfo &l = lights.add();
-        l.ent = -1;
-        l.shadowmap = -1;
-        l.flags = flags;
-        l.query = NULL;
-        l.o = o;
-        l.color = vec(color).mul(255).max(0);
-        l.radius = radius;
-        if(spot > 0)
-        {
-            l.calcspot(dir, spot);
-        }
-        else
-        {
-            l.dir = vec(0, 0, 0);
-            l.spot = 0;
-        }
-        l.dist = camera1->o.dist(o);
-
-        if(calclightscissor(l)) lightorder.add(lights.length()-1);
+        lightinfo &l = lights.add(lightinfo(o, vec(color).mul(255).max(0), radius, flags, dir, spot));
+        if(l.validscissor()) lightorder.add(lights.length()-1);
     }
 
     lightorder.sort(sortlights);
@@ -3395,26 +3417,10 @@ void collectlights()
     {
         int idx = lightorder[i];
         lightinfo &l = lights[idx];
-        if(l.noshadow() || l.radius >= worldsize) continue;
+        if((l.noshadow() && (!oqvol || !(l.flags&L_VOLUMETRIC))) || l.radius >= worldsize) continue;
         vec bbmin, bbmax;
-        if(l.spot > 0)
-        {
-            float spotscale = l.radius * tan360(l.spot);
-            vec up = vec(l.spotx).mul(spotscale).abs(), right = vec(l.spoty).mul(spotscale).abs(), center = vec(l.dir).mul(l.radius).add(l.o);
-            bbmin = bbmax = center;
-            bbmin.sub(up).sub(right);
-            bbmax.add(up).add(right);
-            bbmin.min(l.o);
-            bbmax.max(l.o);
-        }
-        else
-        {
-            bbmin = vec(l.o).sub(l.radius);
-            bbmax = vec(l.o).add(l.radius);
-        }
-        if(camera1->o.x < bbmin.x - 2 || camera1->o.x > bbmax.x + 2 ||
-           camera1->o.y < bbmin.y - 2 || camera1->o.y > bbmax.y + 2 ||
-           camera1->o.z < bbmin.z - 2 || camera1->o.z > bbmax.z + 2)
+        l.calcbb(bbmin, bbmax);
+        if(!camera1->o.insidebb(bbmin, bbmax, 2))
         {
             l.query = newquery(&l);
             if(l.query)
@@ -3514,19 +3520,19 @@ void packlights()
     {
         int idx = lightorder[i];
         lightinfo &l = lights[idx];
-        if(l.shadowmap >= 0)
+        if(l.checkquery())
         {
-            if(l.checkquery())
+            if(l.shadowmap >= 0)
             {
                 shadowmaps[l.shadowmap].light = -1;
                 l.shadowmap = -1;
-                lightsoccluded++;
-                continue;
             }
+            lightsoccluded++;
+            continue;
         }
-        else if(!l.noshadow() && !smnoshadow)
+
+        if(!l.noshadow() && !smnoshadow && l.shadowmap < 0)
         {
-            if(l.checkquery()) { lightsoccluded++; continue; }
             float prec = smprec, lod;
             int w, h;
             if(l.spot) { w = 1; h = 1; prec *= tan360(l.spot); lod = smspotprec; }
@@ -3551,7 +3557,7 @@ void packlights()
 
     lightbatcher.recycle();
     lightbatches.setsize(0);
-    if(lighttilebatch) loop(y, lighttileh)
+    if(lighttilebatch && drawtex != DRAWTEX_MINIMAP) loop(y, lighttileh)
     {
         int band = lighttilebands && lighttilebands < lighttileh ? (y * lighttilebands) / lighttileh : y;
         bool sunpass = !sunlight.iszero() && csmshadowmap && batchsunlight < (gi && giscale && gidist ? 1 : 0);
@@ -3697,7 +3703,14 @@ void radiancehints::renderslices()
     if(!rhrect)
     {
         glViewport(0, 0, sw, sh);
-        if(rhcache) loopi(4) swap(rhtex[i], rhtex[i+4]);
+        if(rhcache)
+        {
+            loopi(4) swap(rhtex[i], rhtex[i+4]);
+            uint clearmasks[RH_MAXSPLITS][(RH_MAXGRID+2+31)/32]; 
+            memcpy(clearmasks, rhclearmasks[0], sizeof(clearmasks));
+            memcpy(rhclearmasks[0], rhclearmasks[1], sizeof(clearmasks));
+            memcpy(rhclearmasks[1], clearmasks, sizeof(clearmasks));
+        }
     }
 
     GLOBALPARAMF(rhatten, 1.0f/(gidist*gidist));
@@ -3740,29 +3753,13 @@ void radiancehints::renderslices()
     gle::defvertex(2);
     gle::deftexcoord0(3);
 
-    memset(rhclearmasks[0], 0xFF, sizeof(rhclearmasks[0]));
+    bool prevcached = true;
     int cx = -1, cy = -1;
     loopirev(rhsplits)
     {
         splitinfo &split = splits[i];
-        if((rhrect || !rhcache || hasCI) && split.cached == split.center && !rhforce)
-        {
-            bool bordercached = true;
-            if(rhborder) for(int k = i+1; k < rhsplits; k++) if(splits[k].cached != splits[k].center) { bordercached = false; break; }
-            if(bordercached)
-            {
-                if(rhrect || !rhcache) continue;
-                loopk(4) glCopyImageSubData_(rhtex[4+k], GL_TEXTURE_3D, 0, 0, 0, i*sh, rhtex[k], GL_TEXTURE_3D, 0, 0, 0, i*sh, sw, sh, sh);
-                continue;
-            }
-        }
-
         float cellradius = split.bounds/rhgrid, step = 2*cellradius, nudge = rhnudge*2*splits[0].bounds/rhgrid + rhworldbias*step;
-        GLOBALPARAM(rhcenter, split.center);
-        GLOBALPARAMF(rhbounds, split.bounds);
-        GLOBALPARAMF(rhspread, cellradius);
-
-        vec cmin, cmax, bmin(1e16f, 1e16f, 1e16f), bmax(-1e16f, -1e16f, -1e16f), dmin(1e16f, 1e16f, 1e16f), dmax(-1e16f, -1e16f, -1e16f);
+        vec cmin, cmax, dmin(1e16f, 1e16f, 1e16f), dmax(-1e16f, -1e16f, -1e16f), bmin(1e16f, 1e16f, 1e16f), bmax(-1e16f, -1e16f, -1e16f);
         loopk(3)
         {
             cmin[k] = floor((worldmin[k] - nudge - (split.center[k] - split.bounds))/step)*step + split.center[k] - split.bounds;
@@ -3779,11 +3776,30 @@ void radiancehints::renderslices()
             dmax[k] = max(dmax[k], (float)ceil((dynmax[k] + gidist + cellradius - (split.center[k] - split.bounds))/step)*step + split.center[k] - split.bounds);
         }
 
+        if((rhrect || !rhcache || hasCI) && split.cached == split.center && (!rhborder || prevcached) && !rhforce &&
+           (dmin.x > split.center.x + split.bounds || dmax.x < split.center.x - split.bounds ||
+            dmin.y > split.center.y + split.bounds || dmax.y < split.center.y - split.bounds ||
+            dmin.z > split.center.z + split.bounds || dmax.z < split.center.z - split.bounds))
+        {
+            if(rhrect || !rhcache || split.copied) continue;
+            split.copied = true;
+            loopk(4) glCopyImageSubData_(rhtex[4+k], GL_TEXTURE_3D, 0, 0, 0, i*sh, rhtex[k], GL_TEXTURE_3D, 0, 0, 0, i*sh, sw, sh, sh);
+            continue;
+        }
+
+        prevcached = false;
+        split.copied = false;
+
+        GLOBALPARAM(rhcenter, split.center);
+        GLOBALPARAMF(rhbounds, split.bounds);
+        GLOBALPARAMF(rhspread, cellradius);
+
         if(rhborder && i + 1 < rhsplits)
         {
             GLOBALPARAMF(bordercenter, 0.5f, 0.5f, float(i+1 + 0.5f)/rhsplits);
             GLOBALPARAMF(borderrange, 0.5f - 0.5f/(rhgrid+2), 0.5f - 0.5f/(rhgrid+2), (0.5f - 0.5f/(rhgrid+2))/rhsplits);
             GLOBALPARAMF(borderscale, rhgrid+2, rhgrid+2, (rhgrid+2)*rhsplits);
+
             splitinfo &next = splits[i+1];
             loopk(3)
             {
@@ -3792,28 +3808,35 @@ void radiancehints::renderslices()
             }
         }
 
+        uint clearmasks[(RH_MAXGRID+2+31)/32];
+        memset(clearmasks, 0xFF, sizeof(clearmasks));
+
         int sy = rhrect ? i*sh : 0;
         loopjrev(sh)
         {
             int sx = rhrect ? j*sw : 0;
-            if(rhrect)
-            {
-                glViewport(sx, sy, sw, sh);
-                glScissor(sx, sy, sw, sh);
-            }
-            else
-            {
-                glFramebufferTexture3D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_3D, rhtex[0], 0, i*sh + j);
-                glFramebufferTexture3D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_3D, rhtex[1], 0, i*sh + j);
-                glFramebufferTexture3D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_3D, rhtex[2], 0, i*sh + j);
-                glFramebufferTexture3D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_3D, rhtex[3], 0, i*sh + j);
-            }
+
+            #define BIND_SLICE do { \
+                if(rhrect) \
+                { \
+                    glViewport(sx, sy, sw, sh); \
+                    glScissor(sx, sy, sw, sh); \
+                } \
+                else \
+                { \
+                    glFramebufferTexture3D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_3D, rhtex[0], 0, i*sh + j); \
+                    glFramebufferTexture3D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_3D, rhtex[1], 0, i*sh + j); \
+                    glFramebufferTexture3D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_3D, rhtex[2], 0, i*sh + j); \
+                    glFramebufferTexture3D_(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_3D, rhtex[3], 0, i*sh + j); \
+                } \
+            } while(0)
 
             float x1 = split.center.x - split.bounds, x2 = split.center.x + split.bounds,
                   y1 = split.center.y - split.bounds, y2 = split.center.y + split.bounds,
                   z = split.center.z - split.bounds + (j-rhborder+0.5f)*step,
                   vx1 = -1 + rhborder*2.0f/(rhgrid+2), vx2 = 1 - rhborder*2.0f/(rhgrid+2), vy1 = -1 + rhborder*2.0f/(rhgrid+2), vy2 = 1 - rhborder*2.0f/(rhgrid+2),
                   tx1 = x1, tx2 = x2, ty1 = y1, ty2 = y2;
+            bool clipped = false;
 
             if(rhborder && i + 1 < rhsplits)
             {
@@ -3836,8 +3859,7 @@ void radiancehints::renderslices()
                         bvx2 += 2*(btx2 - bx2)/(bx2 - bx1);
                         bvy1 += 2*(bty1 - by1)/(by2 - by1);
                         bvy2 += 2*(bty2 - by2)/(by2 - by1);
-
-                        glClear(GL_COLOR_BUFFER_BIT);
+                        clipped = true;
                     }
                 }
 
@@ -3847,17 +3869,26 @@ void radiancehints::renderslices()
                 bty2 = bty2*next.scale.y + next.offset.y;
                 bz = bz*next.scale.z + next.offset.z;
 
+                BIND_SLICE;
+                if(clipped) glClear(GL_COLOR_BUFFER_BIT);
+
                 SETSHADER(radiancehintsborder);
                 rhquad(bvx1, bvy1, bvx2, bvy2, btx1, bty1, btx2, bty2, bz);
 
-                rhclearmasks[0][i][j/32] &= ~(1 << (j%32));
+                clearmasks[j/32] &= ~(1 << (j%32));
             }
 
         noborder:
             if(j < rhborder || j >= rhgrid + rhborder)
             {
             skipped:
-                if(rhclearmasks[0][i][j/32] & (1 << (j%32)) && (!rhrect || (cx < 0 && !(rhclearmasks[1][i][j/32] & (1 << (j%32)))))) { glClear(GL_COLOR_BUFFER_BIT); cx = sx; cy = sy; }
+                if(clearmasks[j/32] & (1 << (j%32)) && (!rhrect || cx < 0) && !(rhclearmasks[0][i][j/32] & (1 << (j%32))))
+                {
+                    BIND_SLICE;
+                    glClear(GL_COLOR_BUFFER_BIT);
+                    cx = sx;
+                    cy = sy;
+                }
                 continue;
             }
 
@@ -3866,20 +3897,25 @@ void radiancehints::renderslices()
                 if(z < cmin.z || z > cmax.z) goto skipped;
                 if(x1 < cmin.x || x2 > cmax.x || y1 < cmin.y || y2 > cmax.y)
                 {
-                    if(rhclearmasks[0][i][j/32] & (1 << (j%32))) glClear(GL_COLOR_BUFFER_BIT);
                     tx1 = max(x1, cmin.x);
                     tx2 = min(x2, cmax.x);
                     ty1 = max(y1, cmin.y);
                     ty2 = min(y2, cmax.y);
-                    if(tx1 > tx2 || ty1 > ty2) continue;
+                    if(tx1 > tx2 || ty1 > ty2) goto skipped;
                     vx1 += 2*rhgrid/float(sw)*(tx1 - x1)/(x2 - x1);
                     vx2 += 2*rhgrid/float(sw)*(tx2 - x2)/(x2 - x1);
                     vy1 += 2*rhgrid/float(sh)*(ty1 - y1)/(y2 - y1);
                     vy2 += 2*rhgrid/float(sh)*(ty2 - y2)/(y2 - y1);
+                    clipped = true;
                 }
             }
 
-            rhclearmasks[0][i][j/32] &= ~(1 << (j%32));
+            if(clearmasks[j/32] & (1 << (j%32)))
+            {
+                BIND_SLICE;
+                if(clipped || (rhborder && i + 1 >= rhsplits)) glClear(GL_COLOR_BUFFER_BIT); 
+                clearmasks[j/32] &= ~(1 << (j%32));
+            }
 
             if(rhcache && z > split.cached.z - split.bounds && z < split.cached.z + split.bounds)
             {
@@ -3965,15 +4001,15 @@ void radiancehints::renderslices()
             glBindTexture(GL_TEXTURE_3D, rhtex[k]);
             loopj(sh)
             {
-                if(rhclearmasks[0][i][j/32] & (1 << (j%32)))
+                if(clearmasks[j/32] & (1 << (j%32)))
                 {
-                    if(!(rhclearmasks[1][i][j/32] & (1 << (j%32)))) glCopyTexSubImage3D_(GL_TEXTURE_3D, 0, 0, 0, sy+j, cx, cy, sw, sh);
+                    if(!(rhclearmasks[0][i][j/32] & (1 << (j%32)))) glCopyTexSubImage3D_(GL_TEXTURE_3D, 0, 0, 0, sy+j, cx, cy, sw, sh);
                     continue;
                 }
                 glCopyTexSubImage3D_(GL_TEXTURE_3D, 0, 0, 0, sy+j, j*sw, sy, sw, sh);
             }
         }
-        memcpy(rhclearmasks[1][i], rhclearmasks[0][i], sizeof(rhclearmasks[0][i]));
+        memcpy(rhclearmasks[0][i], clearmasks, sizeof(clearmasks));
     }
 
     gle::disable();
@@ -4514,7 +4550,7 @@ void rendertransparent()
         case 2:
             if(hasalphavas&2) renderalphageom(2);
             if(hasmats&2) rendersolidmaterials();
-            renderstains(STAINBUF_TRANSPARENT, true);
+            renderstains(STAINBUF_TRANSPARENT, true, layer+1);
             break;
         case 3:
             rendertransparentmodelbatches(layer+1);
@@ -4538,12 +4574,7 @@ void rendertransparent()
         switch(layer)
         {
         case 2:
-            if(ghasstencil)
-            {
-                glStencilFunc(GL_EQUAL, layer+1, 0x07);
-                glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-            }
-            renderstains(STAINBUF_TRANSPARENT, false);
+            renderstains(STAINBUF_TRANSPARENT, false, layer+1);
             break;
         }
     }
@@ -4717,7 +4748,7 @@ void shademodelpreview(int x, int y, int w, int h, bool background, bool scissor
     GLERROR;
 
     glBindFramebuffer_(GL_FRAMEBUFFER, ovr::lensfbo[viewidx]);
-    glViewport(x, y, w, h);
+    glViewport(0, 0, hudw, hudh);
 
     if(msaasamples) glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, mscolortex);
     else glBindTexture(GL_TEXTURE_RECTANGLE, gcolortex);
@@ -4736,15 +4767,18 @@ void shademodelpreview(int x, int y, int w, int h, bool background, bool scissor
 
     SETSHADER(modelpreview);
 
-    LOCALPARAMF(cutout, background ? 0 : 1);
+    LOCALPARAMF(cutout, background ? -1 : 0);
 
     if(scissor) glEnable(GL_SCISSOR_TEST);
-    screenquad(vieww, viewh);
+
+    int sx = clamp(x, 0, hudw), sy = clamp(y, 0, hudh), 
+        sw = clamp(x + w, 0, hudw) - sx, sh = clamp(y + h, 0, hudh) - sy;
+    float sxk = 2.0f/hudw, syk = 2.0f/hudh, txk = vieww/float(w), tyk = viewh/float(h);
+    hudquad(sx*sxk - 1, sy*syk - 1, sw*sxk, sh*syk, (sx-x)*txk, (sy-y)*tyk, sw*txk, sh*tyk);
+
     if(scissor) glDisable(GL_SCISSOR_TEST);
 
     GLERROR;
-
-    glViewport(0, 0, hudw, hudh);
 }
 
 void shadesky()
@@ -4819,7 +4853,7 @@ void cleanuplights()
     cleanupvolumetric();
     cleanupshadowatlas();
     cleanupradiancehints();
-    cleanuplightsphere();
+    lightsphere::cleanup();
     cleanupaa();
 }
 
