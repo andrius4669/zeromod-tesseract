@@ -3200,7 +3200,6 @@ namespace server
                 getstring(text, p);
                 if(!ci || !cq || (ci->state.state==CS_SPECTATOR && !ci->local && !ci->privilege) || !m_teammode || !validteam(cq->team)) break;
                 if(ci->spy || !allowmsg(ci, cq, type)) break;
-                filtertext(text, text);
                 loopv(clients)
                 {
                     clientinfo *t = clients[i];
@@ -3209,6 +3208,7 @@ namespace server
                 }
                 if(isdedicatedserver() && cq)
                 {
+                    filtertext(text, text);
                     if(cq->state.aitype==AI_NONE) logoutf("chat: %s (%d) <%s>: %s", cq->name, cq->clientnum, teamnames[cq->team], text);
                     else logoutf("chat: %s [%d:%d] <%s>: %s", cq->name, cq->ownernum, cq->clientnum, teamnames[cq->team], text);
                 }
