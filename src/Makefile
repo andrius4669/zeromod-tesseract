@@ -1,5 +1,5 @@
 CXXFLAGS= -O3 -fomit-frame-pointer -ffast-math
-override CXXFLAGS+= -Wall -std=gnu++11 -fsigned-char -fno-exceptions -fno-rtti
+override CXXFLAGS+= -std=gnu++11 -Wall -fsigned-char -fno-exceptions -fno-rtti
 
 PLATFORM= $(shell uname -s)
 PLATFORM_ARCH= $(shell uname -m)
@@ -233,19 +233,16 @@ install_client: client
 ifneq (,$(STRIP))
 	$(STRIP) ../bin_unix/$(PLATFORM_PREFIX)_client
 endif
-
 install_server: server
 	cp -f tess_server	../bin_unix/$(PLATFORM_PREFIX)_server
 ifneq (,$(STRIP))
 	$(STRIP) ../bin_unix/$(PLATFORM_PREFIX)_server
 endif
-
 install_master: master
 	cp -f tess_master	../bin_unix/$(PLATFORM_PREFIX)_master
 ifneq (,$(STRIP))
 	$(STRIP) ../bin_unix/$(PLATFORM_PREFIX)_master
 endif
-
 install: install_client install_server
 endif
 
