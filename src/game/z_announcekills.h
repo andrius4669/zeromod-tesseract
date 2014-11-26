@@ -19,7 +19,7 @@ static const char *z_teamcolorname(clientinfo *ci, const char *alt, clientinfo *
 {
     static string buf[3];
     static int bufpos = 0;
-    const char *name = alt && ci==as ? colorname(ci, (char *)alt) : colorname(ci);
+    const char *name = alt && ci==as ? colorname(ci, alt) : colorname(ci);
     if(!m_teammode) return name;
     bufpos = (bufpos+1)%3;
     formatstring(buf[bufpos], "\fs%s%s\fr", teamtextcode[clamp(ci->team, 0, MAXTEAMS)], name);
