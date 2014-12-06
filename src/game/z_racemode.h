@@ -65,6 +65,7 @@ struct raceservmode: servmode
     void cleanup()
     {
         reset();
+        loopv(clients) clients[i]->state.flags = 0;
     }
 
     void reset()
@@ -135,8 +136,8 @@ struct raceservmode: servmode
             if(race_winners[i] >= 0) numfinished++;
             else numavaiable++;
         }
-        int numplayers = numclients(-1, true, false);
-        if(numavaiable <= 0 || numplayers-numfinished <= 0)
+        int numplayers = numclients(-1, true, false), unfinished = numplayers-numfinished;
+        if(numavaiable <= 0 || unfinished <= 0 || (numavaiable >= 1 && unfinished == 1 && numplayers > 1))
         {
             state = ST_FINISHED;
             statemillis = countermillis = totalmillis;
@@ -145,16 +146,13 @@ struct raceservmode: servmode
 
     void moved(clientinfo *ci, const vec &oldpos, bool oldclip, const vec &newpos, bool newclip)
     {
-        if(state != ST_STARTED)
-        {
-            if(gamepaused) update();    /* ugly hack: rely on N_POS messages since update isn't executed normally if paused */
-            return;
-        }
+        if(state != ST_STARTED && state != ST_FINISHED) return;
+        if(ci->state.flags) return;     /* flags are reused for race cheating info */
         int avaiable_place = -1;
         loopv(race_winners)
         {
             int cn = race_winners[i];
-            if(cn == ci->clientnum) return;
+            if(cn == ci->clientnum) break;
             if(cn < 0)
             {
                 avaiable_place = i;
@@ -174,19 +172,38 @@ struct raceservmode: servmode
             }
             break;
         }
-        checkplaces();
+        if(state == ST_STARTED) checkplaces();
+    }
+
+    void racecheat(clientinfo *ci, int type)
+    {
+        if((state < ST_STARTED && type < 2) || state > ST_FINISHED) return;
+        if(ci->state.flags < type)
+        {
+            sendf(ci->clientnum, 1, "ris", N_SERVMSG, type == 1
+                ? "edit mode is not allowed in racemode. please suicide to continue racing"
+                : "editing map is not allowed in racemode. please getmap or reconnect to continue racing");
+            ci->state.flags = type;
+        }
     }
 
     void leavegame(clientinfo *ci, bool disconnecting = false)
     {
         if(disconnecting)
         {
+            ci->state.flags = 0;    /* flags field is reused for cheating info */
             loopvrev(race_winners) if(race_winners[i] == ci->clientnum)
             {
                 sendservmsgf("\f6race: \f7%s \f2left \f6%s PLACE!!", colorname(ci), placename(i));
                 race_winners[i] = -1;
             }
         }
+        if(state == ST_STARTED) checkplaces();
+    }
+
+    void spawned(clientinfo *ci)
+    {
+        if(ci->state.flags == 1) ci->state.flags = 0;
     }
 
     static void sendmaptoclients()
@@ -233,7 +250,7 @@ struct raceservmode: servmode
                 break;
 
             case ST_WAITMAP:
-                if(totalmillis-statemillis>=15000 || canstartrace())
+                if(totalmillis-statemillis>=10000 || canstartrace())
                 {
                     state = ST_READY;
                     statemillis = totalmillis;
@@ -245,15 +262,19 @@ struct raceservmode: servmode
                 if(totalmillis-countermillis >= 0)
                 {
                     countermillis += 1000;
-                    int secsleft = (5000 - (totalmillis - statemillis) + 500)/1000;
+                    int secsleft = (3000 - (totalmillis - statemillis) + 500)/1000;
                     if(secsleft > 0) sendservmsgf("\f6race: \f2starting race in %d...", secsleft);
                 }
-                if(totalmillis-statemillis>=5000)
+                if(totalmillis-statemillis>=3000)
                 {
                     sendservmsg("\f6race: \f7START!!");
                     state = ST_STARTED;
                     pausegame(false, NULL);
-                    loopv(clients) if(clients[i]->state.state != CS_SPECTATOR) sendspawn(clients[i]);
+                    loopv(clients) if(clients[i]->state.state != CS_SPECTATOR)
+                    {
+                        if(clients[i]->state.state!=CS_EDITING) sendspawn(clients[i]);
+                        else racecheat(clients[i], 1);
+                    }
                 }
                 break;
 
@@ -309,5 +330,11 @@ struct raceservmode: servmode
         sendservmsg(buf.getbuf());
     }
 };
+
+bool isracemode()
+{
+    extern raceservmode racemode;
+    return smode==&racemode;
+}
 
 #endif // Z_RACEMODE_H
