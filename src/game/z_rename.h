@@ -33,7 +33,7 @@ void z_servcmd_rename(int argc, char **argv, int sender)
     if(cn >= 0) ci = getinfo(cn);
 
     name[0] = '\0';
-    if(argc > 2) filtertext(name, argv[2], false, MAXNAMELEN);
+    if(argc > 2) filtertext(name, argv[2], false, false, MAXNAMELEN);
     if(!name[0]) copystring(name, "unnamed");
 
     if(ci)

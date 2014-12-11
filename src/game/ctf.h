@@ -28,7 +28,7 @@ struct ctfclientmode : clientmode
         int interptime;
 #endif
 
-        flag() { reset(); }
+        flag() : id(-1) { reset(); }
 
         void reset()
         {
@@ -39,7 +39,7 @@ struct ctfclientmode : clientmode
             owner = dropper = -1;
             owntime = 0;
 #else
-            loopv(players) players[i]->flagpickup &= ~(1<<id);
+            if(id >= 0) loopv(players) players[i]->flagpickup &= ~(1<<id);
             owner = NULL;
             dropangle = spawnangle = 0;
             interploc = vec(0, 0, 0);
@@ -51,7 +51,7 @@ struct ctfclientmode : clientmode
         }
 
 #ifndef SERVMODE
-        const vec &pos()
+        vec pos() const
         {
             if(owner) return vec(owner->o).sub(owner->eyeheight);
             if(droptime) return droploc;
@@ -78,8 +78,8 @@ struct ctfclientmode : clientmode
         if(i<0 || i>=MAXFLAGS) return false;
         while(flags.length()<=i) flags.add();
         flag &f = flags[i];
-        f.reset();
         f.id = i;
+        f.reset();
         f.team = team;
         f.spawnloc = o;
         return true;
@@ -426,6 +426,7 @@ struct ctfclientmode : clientmode
                 bool flash = wait>0 && d==player1 && lastspawnattempt>=d->lastpain && lastmillis < lastspawnattempt+100;
                 draw_textf("%s%d", (x+s/2)/2-(wait>=10 ? 28 : 16), (y+s/2)/2-32, flash ? "\f3" : "", wait);
                 pophudmatrix();
+                resethudshader();
             }
         }
     }

@@ -1338,8 +1338,7 @@ namespace server
     void hashpassword(int cn, int sessionid, const char *pwd, char *result, int maxlen)
     {
         char buf[2*sizeof(string)];
-        formatstring(buf, "%d %d ", cn, sessionid);
-        copystring(&buf[strlen(buf)], pwd);
+        formatstring(buf, "%d %d %s", cn, sessionid, pwd);
         if(!hashstring(buf, result, maxlen)) *result = '\0';
     }
 
@@ -2690,7 +2689,7 @@ namespace server
         ci->cleanauth();
         if(!nextauthreq) nextauthreq = 1;
         ci->authreq = nextauthreq++;
-        filtertext(ci->authname, user, false, 100);
+        filtertext(ci->authname, user, false, false, 100);
         copystring(ci->authdesc, desc);
         if(ci->authdesc[0])
         {
@@ -2874,7 +2873,7 @@ namespace server
                 case N_CONNECT:
                 {
                     getstring(text, p);
-                    filtertext(text, text, false, MAXNAMELEN);
+                    filtertext(text, text, false, false, MAXNAMELEN);
                     if(!text[0]) copystring(text, "unnamed");
                     copystring(ci->name, text, MAXNAMELEN+1);
                     ci->playermodel = getint(p);
@@ -3192,7 +3191,7 @@ namespace server
                 char *tp = text;
                 if(z_servcmd_check(tp)) { z_servcmd_parse(sender, tp); break; }
                 if(!allowmsg(ci, cq, type)) break;
-                filtertext(text, text);
+                filtertext(text, text, true, true);
                 if(isdedicatedserver() && cq)
                 {
                     if(cq->state.aitype==AI_NONE) logoutf("chat: %s (%d): %s", cq->name, cq->clientnum, tp);
@@ -3210,6 +3209,7 @@ namespace server
                 getstring(text, p);
                 if(!ci || !cq || (ci->state.state==CS_SPECTATOR && !ci->local && !ci->privilege) || !m_teammode || !validteam(cq->team)) break;
                 if(ci->spy || !allowmsg(ci, cq, type)) break;
+                filtertext(text, text, true, true);
                 loopv(clients)
                 {
                     clientinfo *t = clients[i];
@@ -3218,7 +3218,6 @@ namespace server
                 }
                 if(isdedicatedserver() && cq)
                 {
-                    filtertext(text, text);
                     if(cq->state.aitype==AI_NONE) logoutf("chat: %s (%d) <%s>: %s", cq->name, cq->clientnum, teamnames[cq->team], text);
                     else logoutf("chat: %s [%d:%d] <%s>: %s", cq->name, cq->ownernum, cq->clientnum, teamnames[cq->team], text);
                 }
@@ -3229,7 +3228,7 @@ namespace server
             {
                 getstring(text, p);
                 if(!allowmsg(ci, ci, type)) break;
-                filtertext(text, text, false, MAXNAMELEN);
+                filtertext(text, text, false, false, MAXNAMELEN);
                 if(!text[0]) copystring(text, "unnamed");
                 if(isdedicatedserver()) logoutf("rename: %s (%d) is now known as %s", ci->name, ci->clientnum, text);
                 copystring(ci->name, text);
