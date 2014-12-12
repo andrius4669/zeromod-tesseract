@@ -2039,7 +2039,7 @@ namespace server
         else
         {
             if(smapname[0]) changemap(smapname, gamemode);
-            else changemap("", 1);
+            else changemap("", 0);
         }
     }
 
