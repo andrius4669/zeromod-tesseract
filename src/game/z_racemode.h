@@ -421,4 +421,10 @@ bool isracemode()
     return smode==&racemode;
 }
 
+bool holdpausecontrol()
+{
+    extern raceservmode racemode;
+    return smode==&racemode && (racemode.state==racemode.ST_WAITMAP || racemode.state==racemode.ST_READY);
+}
+
 #endif // Z_RACEMODE_H

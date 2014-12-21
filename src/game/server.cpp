@@ -1257,7 +1257,8 @@ namespace server
         if(!gamepaused) return;
         int admins = 0;
         loopv(clients) if(clients[i]->privilege >= (restrictpausegame ? PRIV_ADMIN : PRIV_MASTER) || clients[i]->local) admins++;
-        if(!admins) pausegame(false);
+        extern bool holdpausecontrol();
+        if(!admins && !holdpausecontrol()) pausegame(false);
     }
 
     void forcepaused(bool paused)
