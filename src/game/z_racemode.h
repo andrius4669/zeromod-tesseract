@@ -149,6 +149,7 @@ struct raceservmode: servmode
             else numavaiable++;
         }
         int numplayers = numclients(-1, true, false), unfinished = numplayers-numfinished;
+        if(numplayers <= 0) return;
         if(numavaiable <= 0 || unfinished <= 0)
         {
             state = ST_FINISHED;
@@ -308,7 +309,12 @@ struct raceservmode: servmode
             }
 
             case ST_WAITMAP:
-                if(totalmillis-statemillis>=racemode_waitmap || canstartrace())
+                if(clients.empty())
+                {
+                    statemillis = totalmillis;
+                    break;
+                }
+                if((racemode_waitmap && totalmillis-statemillis>=racemode_waitmap) || canstartrace())
                 {
                     state = ST_READY;
                     statemillis = totalmillis;
@@ -356,7 +362,6 @@ struct raceservmode: servmode
                     {
                         /* jump straight into intermission */
                         startintermission();
-                        state = ST_INT;
                     }
                 }
                 break;
@@ -368,11 +373,7 @@ struct raceservmode: servmode
                     int secsleft = (racemode_finishmillis - (totalmillis - statemillis) + 500)/1000;
                     if(shouldshowtimer(secsleft)) sendservmsgf("\f6race: \f2ending race in %s...", formatsecs(secsleft));
                 }
-                if(totalmillis-statemillis >= racemode_finishmillis)
-                {
-                    startintermission();
-                    state = ST_INT;
-                }
+                if(totalmillis-statemillis >= racemode_finishmillis) startintermission();
                 break;
 
             case ST_INT:
@@ -390,6 +391,7 @@ struct raceservmode: servmode
         bool won = false;
 
         state = ST_INT;
+        DELETEP(mapdata);
         loopv(race_winners) if(race_winners[i].cn >= 0)
         {
             clientinfo *ci = getinfo(race_winners[i].cn);
