@@ -1,7 +1,7 @@
 #ifndef Z_MAPLOADED_H
 #define Z_MAPLOADED_H
 
-VAR(mapload_debug, 0, 1, 1);
+VAR(mapload_debug, 0, 0, 1);
 
 static void z_maploaded(clientinfo *ci, bool val = true)
 {
