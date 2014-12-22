@@ -242,7 +242,7 @@ namespace server
 
         char *disc_reason;
         bool chatmute, specmute, editmute, spy, invpriv, namemute;
-        int lastchat, lastedit;
+        int lastchat, lastedit, maploaded;
         geoipstate geoip;
         int nodamage;
 
@@ -311,6 +311,7 @@ namespace server
             mapcrc = 0;
             warned = false;
             gameclip = false;
+            maploaded = 0;
         }
 
         void reassign()
@@ -1130,8 +1131,9 @@ namespace server
         loopv(clients)
         {
             clientinfo *ci = clients[i];
-            extern bool isracemode();
-            if(ci->getmap == packet && isracemode() && ci->state.flags > 0) ci->state.flags = ci->state.state==CS_EDITING ? 1 : 0;
+            if(ci->getmap == packet) ci->maploaded = 0;
+            extern void race_gotmap(clientinfo *);
+            if(ci->getmap == packet) race_gotmap(ci);
             if(ci->getmap == packet) ci->getmap = NULL;
         }
     }
@@ -2863,6 +2865,7 @@ namespace server
 
     #include "z_msgfilter.h"
     #include "z_servcmd.h"
+    #include "z_maploaded.h"
 
     VAR(serverautomaster, 0, 0, 2);
 
@@ -2986,6 +2989,7 @@ namespace server
                         cp->position.setsize(0);
                         while(curmsg<p.length()) cp->position.add(p.buf[curmsg++]);
                     }
+                    if(!ci->maploaded && cp->state.state==CS_ALIVE) z_maploaded(ci);
                     if(smode && cp->state.state==CS_ALIVE) smode->moved(cp, cp->state.o, cp->gameclip, pos, (flags&0x80)!=0);
                     cp->state.o = pos;
                     cp->gameclip = (flags&0x80)!=0;
@@ -3072,6 +3076,7 @@ namespace server
                 }
                 copystring(ci->clientmap, text);
                 ci->mapcrc = text[0] ? crc : 1;
+                z_maploaded(ci);
                 checkmaps();
                 if(cq && cq != ci && cq->ownernum != ci->clientnum) cq = NULL;
                 break;
@@ -3335,6 +3340,7 @@ namespace server
             }
 
             case N_PING:
+                if(!ci->maploaded && totalmillis-ci->connectmillis > 2000) z_maploaded(ci);
                 sendf(sender, 1, "i2", N_PONG, getint(p));
                 break;
 

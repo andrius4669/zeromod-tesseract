@@ -237,7 +237,12 @@ struct raceservmode: servmode
 
     void spawned(clientinfo *ci)
     {
-        if(ci->state.flags == 1) ci->state.flags = 0;
+        if(ci->state.flags == 1)
+        {
+            ci->state.flags = 0;
+            if(ci->state.aitype==AI_NONE) sendf(ci->clientnum, 1, "ris", N_SERVMSG, "since you respawned, you may continue racing");
+        }
+        else if(ci->state.flags == 2 && ci->state.aitype==AI_NONE) warnracecheat(ci);
     }
 
     static void sendmaptoclients()
@@ -257,15 +262,15 @@ struct raceservmode: servmode
         {
             if(z_autosendmap == 0)
             {
-                if(!clients[i]->mapcrc) return false;
+                if(!clients[i]->mapcrc || !clients[i]->maploaded) return false;
             }
             else if(z_autosendmap == 1)
             {
-                if(clients[i]->getmap) return false;
+                if(clients[i]->getmap || !clients[i]->maploaded) return false;
             }
             else
             {
-                if(!clients[i]->mapcrc || clients[i]->getmap) return false;
+                if(!clients[i]->mapcrc || clients[i]->getmap || !clients[i]->maploaded) return false;
             }
         }
         return true;
@@ -419,6 +424,17 @@ bool isracemode()
 {
     extern raceservmode racemode;
     return smode==&racemode;
+}
+
+void race_gotmap(clientinfo *ci)
+{
+    extern raceservmode racemode;
+    if(smode==&racemode && ci->state.flags > 0)
+    {
+        ci->state.flags = ci->state.state==CS_EDITING ? 1 : 0;
+        if(ci->state.flags) raceservmode::warnracecheat(ci);
+        else sendf(ci->clientnum, 1, "ris", N_SERVMSG, "since you got the map, you may continue racing now");
+    }
 }
 
 bool holdpausecontrol()
