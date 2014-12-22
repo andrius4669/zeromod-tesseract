@@ -5,7 +5,7 @@
 
 int z_persistteams = 0;
 VARFN(persistteams, defaultpersistteams, 0, 0, 1, { if(clients.empty()) z_persistteams = defaultpersistteams; });
-static void z_persistteams_trigger(int type) { z_persistteams = defaultpersistteams!=0; }
+static void z_persistteams_trigger(int type) { z_persistteams = defaultpersistteams; }
 Z_TRIGGER(z_persistteams_trigger, Z_TRIGGER_STARTUP);
 Z_TRIGGER(z_persistteams_trigger, Z_TRIGGER_NOCLIENTS);
 
