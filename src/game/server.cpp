@@ -954,7 +954,7 @@ namespace server
     #include "z_persistteams.h"
     void autoteam()
     {
-        if(z_persistteams) { z_autoteam(); return; }
+        if(z_autoteam()) return;
         vector<clientinfo *> team[MAXTEAMS];
         float teamrank[MAXTEAMS] = {0};
         for(int round = 0, remaining = clients.length(); remaining>=0; round++)

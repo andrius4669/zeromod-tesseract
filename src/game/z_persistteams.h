@@ -18,50 +18,49 @@ void z_servcmd_persistteams(int argc, char **argv, int sender)
 SCOMMANDAH(persistteams, PRIV_MASTER, z_servcmd_persistteams, 1);
 SCOMMANDA(persist, PRIV_MASTER, z_servcmd_persistteams, 1);
 
-void z_autoteam()
+bool z_autoteam()
 {
-    if(z_persistteams == 1)
+    if(!z_persistteams) return false;
+    vector<clientinfo *> team[MAXTEAMS];
+    float teamrank[MAXTEAMS] = {0};
+    int remaining = clients.length();
+    loopv(clients) if(validteam(clients[i]->team))
     {
-        vector<clientinfo *> team[MAXTEAMS];
-        float teamrank[MAXTEAMS] = {0};
-        int remaining = clients.length();
-        loopv(clients) if(validteam(clients[i]->team))
-        {
-            clientinfo *ci = clients[i];
-            float rank = ci->state.state!=CS_SPECTATOR ? ci->state.effectiveness/max(ci->state.timeplayed, 1) : -1;
-            if(smode && smode->hidefrags()) rank = 1;
-            ci->state.timeplayed = -1;
-            team[ci->team-1].add(ci);
-            if(rank>0) teamrank[ci->team-1] += rank;
-            remaining--;
-        }
-        for(int round = 0; remaining>=0; round++)
-        {
-            int first = round&1, second = (round+1)&1, selected = 0;
-            while(teamrank[first] <= teamrank[second])
-            {
-                float rank;
-                clientinfo *ci = choosebestclient(rank);
-                if(!ci) break;
-                if(smode && smode->hidefrags()) rank = 1;
-                else if(selected && rank<=0) break;
-                ci->state.timeplayed = -1;
-                team[first].add(ci);
-                if(rank>0) teamrank[first] += rank;
-                selected++;
-                if(rank<=0) break;
-            }
-            if(!selected) break;
-            remaining -= selected;
-        }
-        loopi(MAXTEAMS) loopvj(team[i])
-        {
-            clientinfo *ci = team[i][j];
-            if(ci->team == 1+i) continue;
-            ci->team = 1+i;
-            sendf(-1, 1, "riiii", N_SETTEAM, ci->clientnum, ci->team, -1);
-        }
+        clientinfo *ci = clients[i];
+        float rank = ci->state.state!=CS_SPECTATOR ? ci->state.effectiveness/max(ci->state.timeplayed, 1) : -1;
+        if(smode && smode->hidefrags()) rank = 1;
+        ci->state.timeplayed = -1;
+        team[ci->team-1].add(ci);
+        if(rank>0) teamrank[ci->team-1] += rank;
+        remaining--;
     }
+    for(int round = 0; remaining>=0; round++)
+    {
+        int first = round&1, second = (round+1)&1, selected = 0;
+        while(teamrank[first] <= teamrank[second])
+        {
+            float rank;
+            clientinfo *ci = choosebestclient(rank);
+            if(!ci) break;
+            if(smode && smode->hidefrags()) rank = 1;
+            else if(selected && rank<=0) break;
+            ci->state.timeplayed = -1;
+            team[first].add(ci);
+            if(rank>0) teamrank[first] += rank;
+            selected++;
+            if(rank<=0) break;
+        }
+        if(!selected) break;
+        remaining -= selected;
+    }
+    loopi(MAXTEAMS) loopvj(team[i])
+    {
+        clientinfo *ci = team[i][j];
+        if(ci->team == 1+i) continue;
+        ci->team = 1+i;
+        sendf(-1, 1, "riiii", N_SETTEAM, ci->clientnum, ci->team, -1);
+    }
+    return true;
 }
 
 #endif // Z_PERSISTTEAMS_H
