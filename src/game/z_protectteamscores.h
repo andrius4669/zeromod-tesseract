@@ -3,7 +3,7 @@
 
 VAR(protectteamscores, 0, 0, 1);
 
-int z_calcteamscore(teaminfo *ti, int team, int fragval)
+static inline int z_calcteamscore(teaminfo *ti, int team, int fragval)
 {
     return (ti[team-1].frags += fragval);
 }
