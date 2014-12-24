@@ -484,12 +484,13 @@ game/server.o: game/z_persistteams.h game/z_servercommands.h
 game/server.o: game/z_setmaster_override.h game/z_log.h game/z_racemode.h
 game/server.o: game/z_sendmap.h game/z_servcmd.h game/z_autosendmap.h
 game/server.o: game/z_loadmap.h game/z_awards.h game/z_nodamage.h
-game/server.o: game/z_announcekills.h game/z_scripting.h
-game/server.o: game/z_gbans_override.h game/z_ms_gameserver_override.h
-game/server.o: game/z_mutes.h game/z_rename.h game/z_geoip.h
-game/server.o: game/z_geoipserver.h game/z_msgfilter.h game/z_maploaded.h
-game/server.o: game/extinfo.h game/aiman.h game/z_genericservercommands.h
-game/server.o: game/z_savemap.h game/z_spy.h game/z_mapsucks.h game/z_slay.h
+game/server.o: game/z_announcekills.h game/z_protectteamscores.h
+game/server.o: game/z_scripting.h game/z_gbans_override.h
+game/server.o: game/z_ms_gameserver_override.h game/z_mutes.h game/z_rename.h
+game/server.o: game/z_geoip.h game/z_geoipserver.h game/z_msgfilter.h
+game/server.o: game/z_maploaded.h game/extinfo.h game/aiman.h
+game/server.o: game/z_genericservercommands.h game/z_savemap.h game/z_spy.h
+game/server.o: game/z_mapsucks.h game/z_slay.h
 game/waypoint.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/waypoint.o: shared/ents.h shared/command.h shared/glexts.h
 game/waypoint.o: shared/glemu.h shared/iengine.h shared/igame.h game/ai.h
@@ -540,8 +541,8 @@ standalone/game/server.o: game/z_servercommands.h game/z_setmaster_override.h
 standalone/game/server.o: game/z_log.h game/z_racemode.h game/z_sendmap.h
 standalone/game/server.o: game/z_servcmd.h game/z_autosendmap.h
 standalone/game/server.o: game/z_loadmap.h game/z_awards.h game/z_nodamage.h
-standalone/game/server.o: game/z_announcekills.h game/z_scripting.h
-standalone/game/server.o: game/z_gbans_override.h
+standalone/game/server.o: game/z_announcekills.h game/z_protectteamscores.h
+standalone/game/server.o: game/z_scripting.h game/z_gbans_override.h
 standalone/game/server.o: game/z_ms_gameserver_override.h game/z_mutes.h
 standalone/game/server.o: game/z_rename.h game/z_geoip.h game/z_geoipserver.h
 standalone/game/server.o: game/z_msgfilter.h game/z_maploaded.h

@@ -124,6 +124,7 @@ namespace server
         float effectiveness;
         int stolen, returned;
         int lastkill, multikills, rampage;
+        teaminfo teaminfos[MAXTEAMS];
 
         servstate() : state(CS_DEAD), editstate(CS_DEAD), lifesequence(0) {}
 
@@ -149,6 +150,7 @@ namespace server
 
             lastdeath = 0;
             stolen = returned = 0;
+            loopi(MAXTEAMS) teaminfos[i].reset();
 
             respawn();
         }
@@ -178,6 +180,7 @@ namespace server
         int timeplayed;
         float effectiveness;
         int stolen, returned;
+        teaminfo teaminfos[MAXTEAMS];
 
         void save(servstate &gs)
         {
@@ -191,6 +194,7 @@ namespace server
             effectiveness = gs.effectiveness;
             stolen = gs.stolen;
             returned = gs.returned;
+            loopi(MAXTEAMS) teaminfos[i] = gs.teaminfos[i];
         }
 
         void restore(servstate &gs)
@@ -205,6 +209,7 @@ namespace server
             gs.effectiveness = effectiveness;
             gs.stolen = stolen;
             gs.returned = returned;
+            loopi(MAXTEAMS) gs.teaminfos[i] = teaminfos[i];
         }
     };
 
@@ -2154,6 +2159,7 @@ namespace server
 
     #include "z_nodamage.h"
     #include "z_announcekills.h"
+    #include "z_protectteamscores.h"
     VAR(antispawnkill, 0, 0, 5000); // in milliseconds
 
     void dodamage(clientinfo *target, clientinfo *actor, int damage, int atk, const vec &hitpush = vec(0, 0, 0))
@@ -2184,7 +2190,7 @@ namespace server
                 actor->state.effectiveness += fragvalue*friends/float(max(enemies, 1));
             }
             teaminfo *t = m_teammode && validteam(actor->team) ? &teaminfos[actor->team-1] : NULL;
-            if(t) t->frags += fragvalue;
+            if(t && z_acceptfragval(actor, fragvalue)) t->frags += fragvalue;
             sendf(-1, 1, "ri5", N_DIED, target->clientnum, actor->clientnum, actor->state.frags, t ? t->frags : 0);
             z_announcekill(actor, target, fragvalue);
             target->position.setsize(0);
@@ -2210,7 +2216,7 @@ namespace server
         ci->state.frags += fragvalue;
         ci->state.deaths++;
         teaminfo *t = m_teammode && validteam(ci->team) ? &teaminfos[ci->team-1] : NULL;
-        if(t) t->frags += fragvalue;
+        if(t && z_acceptfragval(ci, fragvalue)) t->frags += fragvalue;
         sendf(-1, 1, "ri5", N_DIED, ci->clientnum, ci->clientnum, gs.frags, t ? t->frags : 0);
         ci->position.setsize(0);
         if(smode) smode->died(ci, NULL);
