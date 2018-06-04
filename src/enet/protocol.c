@@ -134,7 +134,7 @@ enet_protocol_notify_connect (ENetHost * host, ENetPeer * peer, ENetEvent * even
 }
 
 static void
-enet_protocol_notify_disconnect (ENetHost * host, ENetPeer * peer, ENetEvent * event)
+enet_protocol_notify_disconnect (ENetHost * host, ENetPeer * peer, ENetEvent * event, uint32_t reason)
 {
     if (peer -> state >= ENET_PEER_STATE_CONNECTION_PENDING)
        host -> recalculateBandwidthLimits = 1;
@@ -146,13 +146,13 @@ enet_protocol_notify_disconnect (ENetHost * host, ENetPeer * peer, ENetEvent * e
     {
         event -> type = ENET_EVENT_TYPE_DISCONNECT;
         event -> peer = peer;
-        event -> data = 0;
+        event -> data = reason;
 
         enet_peer_reset (peer);
     }
     else 
     {
-        peer -> eventData = 0;
+        peer -> eventData = reason;
 
         enet_protocol_dispatch_state (host, peer, ENET_PEER_STATE_ZOMBIE);
     }
@@ -765,6 +765,10 @@ enet_protocol_handle_bandwidth_limit (ENetHost * host, ENetPeer * peer, const EN
     if (peer -> incomingBandwidth == 0 && host -> outgoingBandwidth == 0)
       peer -> windowSize = ENET_PROTOCOL_MAXIMUM_WINDOW_SIZE;
     else
+    if (peer -> incomingBandwidth == 0 || host -> outgoingBandwidth == 0)
+      peer -> windowSize = (ENET_MAX (peer -> incomingBandwidth, host -> outgoingBandwidth) /
+                             ENET_PEER_WINDOW_SIZE_SCALE) * ENET_PROTOCOL_MINIMUM_WINDOW_SIZE;
+    else
       peer -> windowSize = (ENET_MIN (peer -> incomingBandwidth, host -> outgoingBandwidth) /
                              ENET_PEER_WINDOW_SIZE_SCALE) * ENET_PROTOCOL_MINIMUM_WINDOW_SIZE;
 
@@ -814,7 +818,7 @@ enet_protocol_handle_disconnect (ENetHost * host, ENetPeer * peer, const ENetPro
       enet_protocol_dispatch_state (host, peer, ENET_PEER_STATE_ZOMBIE);
 
     if (peer -> state != ENET_PEER_STATE_DISCONNECTED)
-      peer -> eventData = ENET_NET_TO_HOST_32 (command -> disconnect.data);
+      peer -> eventData = ENET_NET_TO_HOST_32 (command -> disconnect.data) & 0x7FffFFff;
 
     return 0;
 }
@@ -891,7 +895,7 @@ enet_protocol_handle_acknowledge (ENetHost * host, ENetEvent * event, ENetPeer *
        if (commandNumber != ENET_PROTOCOL_COMMAND_DISCONNECT)
          return -1;
 
-       enet_protocol_notify_disconnect (host, peer, event);
+       enet_protocol_notify_disconnect (host, peer, event, 0);
        break;
 
     case ENET_PEER_STATE_DISCONNECT_LATER:
@@ -925,7 +929,7 @@ enet_protocol_handle_verify_connect (ENetHost * host, ENetEvent * event, ENetPee
         ENET_NET_TO_HOST_32 (command -> verifyConnect.packetThrottleDeceleration) != peer -> packetThrottleDeceleration ||
         command -> verifyConnect.connectID != peer -> connectID)
     {
-        peer -> eventData = 0;
+        peer -> eventData = -2;
 
         enet_protocol_dispatch_state (host, peer, ENET_PEER_STATE_ZOMBIE);
 
@@ -1191,7 +1195,9 @@ commandError:
 static int
 enet_protocol_receive_incoming_commands (ENetHost * host, ENetEvent * event)
 {
-    for (;;)
+    int packets;
+
+    for (packets = 0; packets < 256; ++ packets)
     {
        int receivedLength;
        ENetBuffer buffer;
@@ -1204,11 +1210,15 @@ enet_protocol_receive_incoming_commands (ENetHost * host, ENetEvent * event)
                                              & buffer,
                                              1);
 
+       if (receivedLength == -3 ||
+           receivedLength == 0)
+         continue;
+
+       if (receivedLength == -2)
+         return 0;
+
        if (receivedLength < 0)
          return -1;
-
-       if (receivedLength == 0)
-         return 0;
 
        host -> receivedData = host -> packetData [0];
        host -> receivedDataLength = receivedLength;
@@ -1431,7 +1441,7 @@ enet_protocol_check_timeouts (ENetHost * host, ENetPeer * peer, ENetEvent * even
                (outgoingCommand -> roundTripTimeout >= outgoingCommand -> roundTripTimeoutLimit &&
                  ENET_TIME_DIFFERENCE (host -> serviceTime, peer -> earliestTimeout) >= peer -> timeoutMinimum)))
        {
-          enet_protocol_notify_disconnect (host, peer, event);
+          enet_protocol_notify_disconnect (host, peer, event, -1);
 
           return 1;
        }
@@ -1484,7 +1494,7 @@ enet_protocol_send_reliable_outgoing_commands (ENetHost * host, ENetPeer * peer)
                ! (outgoingCommand -> reliableSequenceNumber % ENET_PEER_RELIABLE_WINDOW_SIZE) &&
                (channel -> reliableWindows [(reliableWindow + ENET_PEER_RELIABLE_WINDOWS - 1) % ENET_PEER_RELIABLE_WINDOWS] >= ENET_PEER_RELIABLE_WINDOW_SIZE ||
                  channel -> usedReliableWindows & ((((1 << ENET_PEER_FREE_RELIABLE_WINDOWS) - 1) << reliableWindow) | 
-                   (((1 << ENET_PEER_FREE_RELIABLE_WINDOWS) - 1) >> (ENET_PEER_RELIABLE_WINDOW_SIZE - reliableWindow)))))
+                   (((1 << ENET_PEER_FREE_RELIABLE_WINDOWS) - 1) >> (ENET_PEER_RELIABLE_WINDOWS - reliableWindow)))))
              windowWrap = 1;
           if (windowWrap)
           {
