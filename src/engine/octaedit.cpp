@@ -4,6 +4,36 @@ extern int outline;
 
 bool boxoutline = false;
 
+void boxs(int orient, vec o, const vec &s, float size)
+{   
+    int d = dimension(orient), dc = dimcoord(orient);
+    float f = boxoutline ? (dc>0 ? 0.2f : -0.2f) : 0;
+    o[D[d]] += dc * s[D[d]] + f;
+
+    vec r(0, 0, 0), c(0, 0, 0);
+    r[R[d]] = s[R[d]];
+    c[C[d]] = s[C[d]];
+
+    vec v1 = o, v2 = vec(o).add(r), v3 = vec(o).add(r).add(c), v4 = vec(o).add(c);
+
+    r[R[d]] = 0.5f*size;
+    c[C[d]] = 0.5f*size;
+
+    gle::defvertex();
+    gle::begin(GL_TRIANGLE_STRIP);
+    gle::attrib(vec(v1).sub(r).sub(c));
+        gle::attrib(vec(v1).add(r).add(c));
+    gle::attrib(vec(v2).add(r).sub(c));
+        gle::attrib(vec(v2).sub(r).add(c));
+    gle::attrib(vec(v3).add(r).add(c));
+        gle::attrib(vec(v3).sub(r).sub(c));
+    gle::attrib(vec(v4).sub(r).add(c));
+        gle::attrib(vec(v4).add(r).sub(c));
+    gle::attrib(vec(v1).sub(r).sub(c));
+        gle::attrib(vec(v1).add(r).add(c));
+    xtraverts += gle::end();
+}
+
 void boxs(int orient, vec o, const vec &s)
 {
     int d = dimension(orient), dc = dimcoord(orient);
@@ -370,13 +400,13 @@ void rendereditcursor()
                     loopi(3) w[i] = clamp(player->o[i], 0.0f, float(worldsize));
                 }
             }
-            cube *c = &lookupcube(w);
+            cube *c = &lookupcube(ivec(w));
             if(gridlookup && !dragging && !moving && !havesel && hmapedit!=1) gridsize = lusize;
             int mag = lusize / gridsize;
-            normalizelookupcube(w);
+            normalizelookupcube(ivec(w));
             if(sdist == 0 || sdist > wdist) rayboxintersect(vec(lu), vec(gridsize), player->o, camdir, t=0, orient); // just getting orient
             cur = lu;
-            cor = vec(w).mul(2).div(gridsize);
+            cor = ivec(vec(w).mul(2).div(gridsize));
             od = dimension(orient);
             d = dimension(sel.orient);
 
@@ -437,6 +467,7 @@ void rendereditcursor()
         }
     }
 
+    glDisable(GL_CULL_FACE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
 
@@ -486,9 +517,8 @@ void rendereditcursor()
 
     boxoutline = false;
 
-    gle::disable();
-
     glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
 }
 
 void tryedit()
@@ -538,7 +568,6 @@ void commitchanges(bool force)
     if(!force && !haschanged) return;
     haschanged = false;
 
-    extern vector<vtxarray *> valist;
     int oldlen = valist.length();
     resetclipplanes();
     entitiesinoctanodes();
@@ -597,9 +626,9 @@ void blockcopy(const block3 &s, int rgrid, block3 *b)
 block3 *blockcopy(const block3 &s, int rgrid)
 {
     int bsize = sizeof(block3)+sizeof(cube)*s.size();
-    if(bsize <= 0 || bsize > (100<<20)) return 0;
-    block3 *b = (block3 *)new uchar[bsize];
-    blockcopy(s, rgrid, b);
+    if(bsize <= 0 || bsize > (100<<20)) return NULL;
+    block3 *b = (block3 *)new (false) uchar[bsize];
+    if(b) blockcopy(s, rgrid, b);
     return b;
 }
 
@@ -640,7 +669,7 @@ static inline int undosize(undoblock *u)
     {
         block3 *b = u->block();
         cube *q = b->c();
-        int size = b->size(), total = size*sizeof(int);
+        int size = b->size(), total = size;
         loopj(size) total += familysize(*q++)*sizeof(cube);
         return total;
     }
@@ -716,7 +745,8 @@ undoblock *newundocube(const selinfo &s)
         selgridsize = ssize,
         blocksize = sizeof(block3)+ssize*sizeof(cube);
     if(blocksize <= 0 || blocksize > (undomegs<<20)) return NULL;
-    undoblock *u = (undoblock *)new uchar[sizeof(undoblock) + blocksize + selgridsize];
+    undoblock *u = (undoblock *)new (false) uchar[sizeof(undoblock) + blocksize + selgridsize];
+    if(!u) return NULL;
     u->numents = 0;
     block3 *b = u->block();
     blockcopy(s, -s.grid, b);
@@ -738,6 +768,9 @@ VARP(nompedit, 0, 1, 1);
 
 void makeundo(selinfo &s)
 {
+#ifdef OLDPROTO
+    if(nompedit && multiplayer(false)) return;
+#endif
     undoblock *u = newundocube(s);
     if(u) addundo(u);
 }
@@ -760,7 +793,11 @@ static int countblock(block3 *b) { return countblock(b->c(), b->size()); }
 
 void swapundo(undolist &a, undolist &b, int op)
 {
+#ifndef OLDPROTO
     if(noedit()) return;
+#else
+    if(noedit() || (nompedit && multiplayer())) return;
+#endif
     if(a.empty()) { conoutf(CON_WARN, "nothing more to %s", op == EDIT_REDO ? "redo" : "undo"); return; }
     int ts = a.last->timestamp;
     if(multiplayer(false))
@@ -920,7 +957,8 @@ static bool unpackblock(block3 *&b, B &buf)
     lilswap(&hdr.grid, 1);
     lilswap(&hdr.orient, 1);
     if(hdr.size() > (1<<20) || hdr.grid <= 0 || hdr.grid > (1<<12)) return false;
-    b = (block3 *)new uchar[sizeof(block3)+hdr.size()*sizeof(cube)];
+    b = (block3 *)new (false) uchar[sizeof(block3)+hdr.size()*sizeof(cube)];
+    if(!b) return false;
     *b = hdr;
     cube *c = b->c();
     memset(c, 0, b->size()*sizeof(cube));
@@ -976,8 +1014,8 @@ static bool compresseditinfo(const uchar *inbuf, int inlen, uchar *&outbuf, int 
 {
     uLongf len = compressBound(inlen);
     if(len > (1<<20)) return false;
-    outbuf = new uchar[len];
-    if(compress2((Bytef *)outbuf, &len, (const Bytef *)inbuf, inlen, Z_BEST_COMPRESSION) != Z_OK || len > (1<<16))
+    outbuf = new (false) uchar[len];
+    if(!outbuf || compress2((Bytef *)outbuf, &len, (const Bytef *)inbuf, inlen, Z_BEST_COMPRESSION) != Z_OK || len > (1<<16))
     {
         delete[] outbuf;
         outbuf = NULL;
@@ -991,8 +1029,8 @@ static bool uncompresseditinfo(const uchar *inbuf, int inlen, uchar *&outbuf, in
 {
     if(compressBound(outlen) > (1<<20)) return false;
     uLongf len = outlen;
-    outbuf = new uchar[len];
-    if(uncompress((Bytef *)outbuf, &len, (const Bytef *)inbuf, inlen) != Z_OK)
+    outbuf = new (false) uchar[len];
+    if(!outbuf || uncompress((Bytef *)outbuf, &len, (const Bytef *)inbuf, inlen) != Z_OK)
     {
         delete[] outbuf;
         outbuf = NULL;
@@ -1070,7 +1108,11 @@ bool unpackundo(const uchar *inbuf, int inlen, int outlen)
     uchar *outbuf = NULL;
     if(!uncompresseditinfo(inbuf, inlen, outbuf, outlen)) return false;
     ucharbuf buf(outbuf, outlen);
-    if(buf.remaining() < 2) return false;
+    if(buf.remaining() < 2)
+    {
+        delete[] outbuf;
+        return false;
+    }
     int numents = lilswap(*(const ushort *)buf.pad(2));
     if(numents)
     {
@@ -1273,15 +1315,15 @@ struct prefabmesh
 
         loopv(verts) verts[i].norm.flip();
         if(!p.vbo) glGenBuffers_(1, &p.vbo);
-        glBindBuffer_(GL_ARRAY_BUFFER, p.vbo);
+        gle::bindvbo(p.vbo);
         glBufferData_(GL_ARRAY_BUFFER, verts.length()*sizeof(vertex), verts.getbuf(), GL_STATIC_DRAW);
-        glBindBuffer_(GL_ARRAY_BUFFER, 0);
+        gle::clearvbo();
         p.numverts = verts.length();
 
         if(!p.ebo) glGenBuffers_(1, &p.ebo);
-        glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, p.ebo);
+        gle::bindebo(p.ebo);
         glBufferData_(GL_ELEMENT_ARRAY_BUFFER, tris.length()*sizeof(ushort), tris.getbuf(), GL_STATIC_DRAW);
-        glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, 0);
+        gle::clearebo();
         p.numtris = tris.length()/3;
     }
 
@@ -1316,7 +1358,7 @@ static void genprefabmesh(prefabmesh &r, cube &c, const ivec &co, int size)
             if(vis&2) pos[numverts++] = vec(v[(order+3)&3]).mul(size/8.0f).add(vo);
             guessnormals(pos, numverts, norm);
             int index[4];
-            loopj(numverts) index[j] = r.addvert(pos[j], norm[j]);
+            loopj(numverts) index[j] = r.addvert(pos[j], bvec(norm[j]));
             loopj(numverts-2) if(index[0]!=index[j+1] && index[j+1]!=index[j+2] && index[j+2]!=index[0])
             {
                 r.tris.add(index[0]);
@@ -1384,8 +1426,8 @@ static void renderprefab(prefab &p, const vec &o, float yaw, float pitch, float 
     if(size > 0 && size != 1) m.scale(size);
     m.translate(vec(b.s).mul(-b.grid*0.5f));
 
-    glBindBuffer_(GL_ARRAY_BUFFER, p.vbo);
-    glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, p.ebo);
+    gle::bindvbo(p.vbo);
+    gle::bindebo(p.ebo);
     gle::enablevertex();
     gle::enablenormal();
     prefabmesh::vertex *v = (prefabmesh::vertex *)0;
@@ -1414,8 +1456,8 @@ static void renderprefab(prefab &p, const vec &o, float yaw, float pitch, float 
 
     gle::disablevertex();
     gle::disablenormal();
-    glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, 0);
-    glBindBuffer_(GL_ARRAY_BUFFER, 0);
+    gle::clearebo();
+    gle::clearvbo();
 }
 
 void renderprefab(const char *name, const vec &o, float yaw, float pitch, float roll, float size, const vec &color)
@@ -2147,7 +2189,11 @@ VAR(usevdelta, 1, 0, 0);
 
 void vdelta(uint *body)
 {
+#ifndef OLDPROTO
     if(noedit()) return;
+#else
+    if(noedit() || (nompedit && multiplayer())) return;
+#endif
     usevdelta++;
     execute(body);
     usevdelta--;
@@ -2156,7 +2202,11 @@ COMMAND(vdelta, "e");
 
 void vrotate(int *n)
 {
+#ifndef OLDPROTO
     if(noedit()) return;
+#else
+    if(noedit() || (nompedit && multiplayer())) return;
+#endif
     VSlot ds;
     ds.changed = 1<<VSLOT_ROTATION;
     ds.rotation = usevdelta ? *n : clamp(*n, 0, 5);
@@ -2166,7 +2216,11 @@ COMMAND(vrotate, "i");
 
 void voffset(int *x, int *y)
 {
+#ifndef OLDPROTO
     if(noedit()) return;
+#else
+    if(noedit() || (nompedit && multiplayer())) return;
+#endif
     VSlot ds;
     ds.changed = 1<<VSLOT_OFFSET;
     ds.offset = usevdelta ? ivec2(*x, *y) : ivec2(*x, *y).max(0);
@@ -2176,7 +2230,11 @@ COMMAND(voffset, "ii");
 
 void vscroll(float *s, float *t)
 {
+#ifndef OLDPROTO
     if(noedit()) return;
+#else
+    if(noedit() || (nompedit && multiplayer())) return;
+#endif
     VSlot ds;
     ds.changed = 1<<VSLOT_SCROLL;
     ds.scroll = vec2(*s/1000.0f, *t/1000.0f);
@@ -2186,7 +2244,11 @@ COMMAND(vscroll, "ff");
 
 void vscale(float *scale)
 {
+#ifndef OLDPROTO
     if(noedit()) return;
+#else
+    if(noedit() || (nompedit && multiplayer())) return;
+#endif
     VSlot ds;
     ds.changed = 1<<VSLOT_SCALE;
     ds.scale = *scale <= 0 ? 1 : (usevdelta ? *scale : clamp(*scale, 1/8.0f, 8.0f));
@@ -2196,7 +2258,11 @@ COMMAND(vscale, "f");
 
 void vlayer(int *n)
 {
+#ifndef OLDPROTO
     if(noedit()) return;
+#else
+    if(noedit() || (nompedit && multiplayer())) return;
+#endif
     VSlot ds;
     ds.changed = 1<<VSLOT_LAYER;
     if(vslots.inrange(*n))
@@ -2226,7 +2292,11 @@ COMMAND(vdetail, "i");
 
 void valpha(float *front, float *back)
 {
+#ifndef OLDPROTO
     if(noedit()) return;
+#else
+    if(noedit() || (nompedit && multiplayer())) return;
+#endif
     VSlot ds;
     ds.changed = 1<<VSLOT_ALPHA;
     ds.alphafront = clamp(*front, 0.0f, 1.0f);
@@ -2237,7 +2307,11 @@ COMMAND(valpha, "ff");
 
 void vcolor(float *r, float *g, float *b)
 {
+#ifndef OLDPROTO
     if(noedit()) return;
+#else
+    if(noedit() || (nompedit && multiplayer())) return;
+#endif
     VSlot ds;
     ds.changed = 1<<VSLOT_COLOR;
     ds.colorscale = vec(clamp(*r, 0.0f, 2.0f), clamp(*g, 0.0f, 2.0f), clamp(*b, 0.0f, 2.0f));
@@ -2262,7 +2336,11 @@ COMMAND(vrefract, "ffff");
 
 void vreset()
 {
+#ifndef OLDPROTO
     if(noedit()) return;
+#else
+    if(noedit() || (nompedit && multiplayer())) return;
+#endif
     VSlot ds;
     mpeditvslot(usevdelta, ds, allfaces, sel, true);
 }
@@ -2270,7 +2348,11 @@ COMMAND(vreset, "");
 
 void vshaderparam(const char *name, float *x, float *y, float *z, float *w)
 {
+#ifndef OLDPROTO
     if(noedit()) return;
+#else
+    if(noedit() || (nompedit && multiplayer())) return;
+#endif
     VSlot ds;
     ds.changed = 1<<VSLOT_SHPARAM;
     if(name[0])
@@ -2782,7 +2864,6 @@ void rendertexturepanel(int w, int h)
             y += s+gap;
         }
 
-        gle::disable();
         pophudmatrix(true, false);
         resethudshader();
     }

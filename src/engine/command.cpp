@@ -318,13 +318,28 @@ static inline void undoarg(ident &id, identstack &stack)
     cleancode(id);
 }
 
+#define UNDOFLAG (1<<MAXARGS)
 #define UNDOARGS \
     identstack argstack[MAXARGS]; \
-    for(int argmask = aliasstack->usedargs, i = 0; argmask; argmask >>= 1, i++) if(argmask&1) \
-        undoarg(*identmap[i], argstack[i]); \
-    identlink *prevstack = aliasstack->next; \
-    identlink aliaslink = { aliasstack->id, aliasstack, prevstack->usedargs, prevstack->argstack }; \
-    aliasstack = &aliaslink;
+    identlink *prevstack = aliasstack; \
+    identlink aliaslink; \
+    for(int undos = 0; prevstack != &noalias; prevstack = prevstack->next) \
+    { \
+        if(prevstack->usedargs & UNDOFLAG) ++undos; \
+        else if(undos > 0) --undos; \
+        else \
+        { \
+            prevstack = prevstack->next; \
+            for(int argmask = aliasstack->usedargs & ~UNDOFLAG, i = 0; argmask; argmask >>= 1, i++) if(argmask&1) \
+                undoarg(*identmap[i], argstack[i]); \
+            aliaslink.id = aliasstack->id; \
+            aliaslink.next = aliasstack; \
+            aliaslink.usedargs = UNDOFLAG | prevstack->usedargs; \
+            aliaslink.argstack = prevstack->argstack; \
+            aliasstack = &aliaslink; \
+            break; \
+        } \
+    } \
 
 static inline void redoarg(ident &id, const identstack &stack)
 {
@@ -337,10 +352,13 @@ static inline void redoarg(ident &id, const identstack &stack)
 }
 
 #define REDOARGS \
-    prevstack->usedargs = aliaslink.usedargs; \
-    aliasstack = aliaslink.next; \
-    for(int argmask = aliasstack->usedargs, i = 0; argmask; argmask >>= 1, i++) if(argmask&1) \
-        redoarg(*identmap[i], argstack[i]);
+    if(aliasstack == &aliaslink) \
+    { \
+        prevstack->usedargs |= aliaslink.usedargs & ~UNDOFLAG; \
+        aliasstack = aliaslink.next; \
+        for(int argmask = aliasstack->usedargs & ~UNDOFLAG, i = 0; argmask; argmask >>= 1, i++) if(argmask&1) \
+            redoarg(*identmap[i], argstack[i]); \
+    }
 
 ICOMMAND(push, "rTe", (ident *id, tagval *v, uint *code),
 {
@@ -1363,7 +1381,16 @@ static bool compileblockstr(vector<uint> &code, const char *str, const char *end
                 break;
             }
             case '/':
-                if(str[1] == '/') str += strcspn(str, "\n\0");
+                if(str[1] == '/')
+                {
+                    size_t comment = strcspn(str, "\n\0");
+                    if (iscubepunct(str[2]))
+                    {
+                        memcpy(&buf[len], str, comment);
+                        len += comment;
+                    }
+                    str += comment;
+                }
                 else buf[len++] = *str++;
                 break;
             case '@':
@@ -1755,7 +1782,15 @@ static void compilestatements(vector<uint> &code, const char *&p, int rettype, i
 #endif
                     case 'C': comtype = CODE_COMC; if(more) while(numargs < MAXARGS && (more = compilearg(code, p, VAL_CANY, prevargs+numargs))) numargs++; goto compilecomv;
                     case 'V': comtype = CODE_COMV; if(more) while(numargs < MAXARGS && (more = compilearg(code, p, VAL_CANY, prevargs+numargs))) numargs++; goto compilecomv;
-                    case '1': case '2': case '3': case '4': if(more) { fmt -= *fmt-'0'+1; rep = true; } break;
+                    case '1': case '2': case '3': case '4':
+                        if(more && numargs < MAXARGS)
+                        { 
+                            int numrep = *fmt-'0'+1;
+                            fmt -= numrep;
+                            rep = true;
+                        }
+                        else for(; numargs > MAXARGS; numargs--) code.add(CODE_POP);
+                        break;
                     }
                     code.add(comtype|retcodeany(rettype)|(id->index<<8));
                     break;
@@ -2285,17 +2320,15 @@ static const uint *runcode(const uint *code, tagval &result)
             }
 
             case CODE_DOARGS|RET_NULL: case CODE_DOARGS|RET_STR: case CODE_DOARGS|RET_INT: case CODE_DOARGS|RET_FLOAT:
-                if(aliasstack != &noalias)
-                {
-                    UNDOARGS
-                    freearg(result);
-                    runcode(args[--numargs].code, result);
-                    freearg(args[numargs]);
-                    forcearg(result, op&CODE_RET_MASK);
-                    REDOARGS
-                    continue;
-                }
-                // fall-through
+            {
+                UNDOARGS
+                freearg(result);
+                runcode(args[--numargs].code, result);
+                freearg(args[numargs]);
+                forcearg(result, op&CODE_RET_MASK);
+                REDOARGS
+                continue;
+            }
 
             case CODE_DO|RET_NULL: case CODE_DO|RET_STR: case CODE_DO|RET_INT: case CODE_DO|RET_FLOAT:
                 freearg(result);
@@ -2702,7 +2735,7 @@ static const uint *runcode(const uint *code, tagval &result)
                     identflags = oldflags; \
                     for(int i = 0; i < callargs; i++) \
                         poparg(*identmap[i]); \
-                    for(int argmask = aliaslink.usedargs&(~0<<callargs), i = callargs; argmask; i++) \
+                    for(int argmask = aliaslink.usedargs&(~0U<<callargs), i = callargs; argmask; i++) \
                         if(argmask&(1<<i)) { poparg(*identmap[i]); argmask &= ~(1<<i); } \
                     forcearg(result, op&CODE_RET_MASK); \
                     _numargs = oldargs; \
@@ -3118,6 +3151,15 @@ void writecfg(const char *name)
 COMMAND(writecfg, "s");
 #endif
 
+void changedvars()
+{
+    vector<ident *> ids;
+    enumerate(idents, ident, id, if(id.flags&IDF_OVERRIDDEN) ids.add(&id));
+    ids.sortname();
+    loopv(ids) printvar(ids[i]);
+}
+COMMAND(changedvars, "");
+
 // below the commands that implement a small imperative language. thanks to the semantics of
 // () and [] expressions, any control construct can be defined trivially.
 
@@ -3220,7 +3262,7 @@ void loopend(ident *id, identstack &stack)
 
 static inline void setiter(ident &id, int i, identstack &stack)
 {
-    if(i)
+    if(id.stack == &stack)
     {
         if(id.valtype != VAL_INT)
         {
@@ -3232,9 +3274,9 @@ static inline void setiter(ident &id, int i, identstack &stack)
     }
     else
     {
-        tagval zero;
-        zero.setint(0);
-        pusharg(id, zero, stack);
+        tagval t;
+        t.setint(i);
+        pusharg(id, t, stack);
         id.flags &= ~IDF_UNKNOWN;
     }
 }
@@ -3314,6 +3356,18 @@ void concatword(tagval *v, int n)
     commandret->setstr(conc(v, n, false));
 }
 COMMAND(concatword, "V");
+
+void append(ident *id, tagval *v, bool space)
+{
+    if(id->type != ID_ALIAS || v->type == VAL_NULL) return;
+    tagval r;
+    const char *prefix = id->getstr();
+    if(prefix[0]) r.setstr(conc(v, 1, space, prefix));
+    else v->getval(r);
+    if(id->index < MAXARGS) setarg(*id, r); else setalias(*id, r);
+}
+ICOMMAND(append, "rt", (ident *id, tagval *v), append(id, v, true));
+ICOMMAND(appendword, "rt", (ident *id, tagval *v), append(id, v, false));
 
 void result(tagval &v)
 {
@@ -3680,7 +3734,7 @@ void prettylist(const char *s, const char *conj)
     const char *start, *end, *qstart;
     for(int len = listlen(s), n = 0; parselist(s, start, end, qstart); n++)
     {
-        if(*qstart == '"') p.advance(unescapestring(p.reserve(end - start).buf, start, end));
+        if(*qstart == '"') p.advance(unescapestring(p.reserve(end - start + 1).buf, start, end));
         else p.put(start, end - start);
         if(n+1 < len)
         {

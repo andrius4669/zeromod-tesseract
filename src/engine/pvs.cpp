@@ -332,7 +332,7 @@ struct pvsworker
             levels[curlevel] = cur;
         }
 
-        origin = ivec(p.x&(~0<<curlevel), p.y&(~0<<curlevel), p.z&(~0<<curlevel));
+        origin = ivec(p.x&(~0U<<curlevel), p.y&(~0U<<curlevel), p.z&(~0U<<curlevel));
 
         if(cur->flags&PVS_HIDE_BB || cur->edges==bvec(0x80, 0x80, 0x80))
         {
@@ -444,9 +444,12 @@ struct pvsworker
                       dxz(order[1].index|order[3].index, order[1].dist+order[3].dist),
                       dyz(order[2].index|order[3].index, order[2].dist+order[3].dist);
             int j;
-            for(j = 4; j > 0 && dxy.dist < order[j-1].dist; --j) order[j] = order[j-1]; order[j] = dxy;
-            for(j = 5; j > 0 && dxz.dist < order[j-1].dist; --j) order[j] = order[j-1]; order[j] = dxz;
-            for(j = 6; j > 0 && dyz.dist < order[j-1].dist; --j) order[j] = order[j-1]; order[j] = dyz;
+            for(j = 4; j > 0 && dxy.dist < order[j-1].dist; --j) order[j] = order[j-1];
+            order[j] = dxy;
+            for(j = 5; j > 0 && dxz.dist < order[j-1].dist; --j) order[j] = order[j-1];
+            order[j] = dxz;
+            for(j = 6; j > 0 && dyz.dist < order[j-1].dist; --j) order[j] = order[j-1];
+            order[j] = dyz;
             loopi(8)
             {
                 int index = order[i].index^dir;
@@ -726,7 +729,7 @@ struct pvsworker
             bbmin[dim] += dimcoord(m.orient) ? -2 : 2;
             bbmax[C[dim]] += m.csize;
             bbmax[R[dim]] += m.rsize;
-            if(!materialoccluded(pvsnodes[0], vec(0, 0, 0), worldsize/2, bbmin, bbmax)) return false;
+            if(!materialoccluded(pvsnodes[0], ivec(0, 0, 0), worldsize/2, bbmin, bbmax)) return false;
         }
         return true;
     }
@@ -860,7 +863,6 @@ static void calcpvsbounds()
 {
     loopk(3) pvsbounds.min[k] = USHRT_MAX;
     loopk(3) pvsbounds.max[k] = 0;
-    extern vector<vtxarray *> valist;
     loopv(valist)
     {
         vtxarray *va = valist[i];
@@ -1021,7 +1023,6 @@ COMMAND(clearpvs, "");
 
 static void findwaterplanes()
 {
-    extern vector<vtxarray *> valist;
     loopi(MAXWATERPVS)
     {
         waterplanes[i].height = -1;
@@ -1080,8 +1081,7 @@ void testpvs(int *vcsize)
     int size = *vcsize>0 ? *vcsize : 32;
     for(int mask = 1; mask < size; mask <<= 1) size &= ~mask;
 
-    ivec o = camera1->o;
-    o.mask(~(size-1));
+    ivec o = ivec(camera1->o).mask(~(size-1));
     pvsworker w;
     int len;
     lockedpvs = w.testviewcell(o, size, &lockedwaterpvs, &len);
@@ -1232,7 +1232,7 @@ bool pvsoccluded(const ivec &bbmin, const ivec &bbmax)
 bool pvsoccludedsphere(const vec &center, float radius)
 {
     if(curpvs==NULL) return false;
-    ivec bbmin = vec(center).sub(radius), bbmax = vec(center).add(radius+1);
+    ivec bbmin(vec(center).sub(radius)), bbmax(vec(center).add(radius+1));
     return pvsoccluded(curpvs, bbmin, bbmax);
 }
 

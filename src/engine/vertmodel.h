@@ -167,6 +167,7 @@ struct vertmodel : animmodel
 
         void render(const animstate *as, skin &s, vbocacheentry &vc)
         {
+            if(!Shader::lastshader) return;
             glDrawRangeElements_(GL_TRIANGLES, minvert, maxvert, elen, GL_UNSIGNED_SHORT, &((vertmeshgroup *)group)->edata[eoffset]);
             glde++;
             xtravertsva += numverts;
@@ -297,7 +298,7 @@ struct vertmodel : animmodel
             else
             {
                 vertsize = sizeof(vvertg);
-                glBindBuffer_(GL_ARRAY_BUFFER, vc.vbuf);
+                gle::bindvbo(vc.vbuf);
                 #define GENVBO(type) \
                     do \
                     { \
@@ -314,13 +315,13 @@ struct vertmodel : animmodel
                 GENVBO(vvertg);
                 delete[] htdata;
                 #undef GENVBO
-                glBindBuffer_(GL_ARRAY_BUFFER, 0);
+                gle::clearvbo();
             }
 
             glGenBuffers_(1, &ebuf);
-            glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, ebuf);
+            gle::bindebo(ebuf);
             glBufferData_(GL_ELEMENT_ARRAY_BUFFER, idxs.length()*sizeof(ushort), idxs.getbuf(), GL_STATIC_DRAW);
-            glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, 0);
+            gle::clearebo();
         }
 
         template<class T>
@@ -398,7 +399,7 @@ struct vertmodel : animmodel
                     {
                         m.interpverts(*as, (vvert *)vdata, p->skins[i]);
                     });
-                    glBindBuffer_(GL_ARRAY_BUFFER, vc->vbuf);
+                    gle::bindvbo(vc->vbuf);
                     glBufferData_(GL_ARRAY_BUFFER, vlen*vertsize, vdata, GL_STREAM_DRAW);
                 }
                 vc->millis = lastmillis;
@@ -443,8 +444,9 @@ struct vertmodel : animmodel
     }
 };
 
-template<class MDL> struct vertloader : modelloader<MDL>
+template<class MDL> struct vertloader : modelloader<MDL, vertmodel>
 {
+    vertloader(const char *name) : modelloader<MDL, vertmodel>(name) {}
 };
 
 template<class MDL> struct vertcommands : modelcommands<MDL, struct MDL::vertmesh>

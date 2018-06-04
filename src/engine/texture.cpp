@@ -8,65 +8,122 @@
   #include "SDL_image.h"
 #endif
 
-#define FUNCNAME(name) name##1
-#define DEFPIXEL uint OP(r, 0);
-#define PIXELOP OP(r, 0);
-#define BPP 1
-#include "scale.h"
+template<int BPP> static void halvetexture(uchar * RESTRICT src, uint sw, uint sh, uint stride, uchar * RESTRICT dst)
+{
+    for(uchar *yend = &src[sh*stride]; src < yend;)
+    {
+        for(uchar *xend = &src[sw*BPP], *xsrc = src; xsrc < xend; xsrc += 2*BPP, dst += BPP)
+        {
+            loopi(BPP) dst[i] = (uint(xsrc[i]) + uint(xsrc[i+BPP]) + uint(xsrc[stride+i]) + uint(xsrc[stride+i+BPP]))>>2;
+        }
+        src += 2*stride;
+    }
+}
 
-#define FUNCNAME(name) name##2
-#define DEFPIXEL uint OP(r, 0), OP(g, 1);
-#define PIXELOP OP(r, 0); OP(g, 1);
-#define BPP 2
-#include "scale.h"
+template<int BPP> static void shifttexture(uchar * RESTRICT src, uint sw, uint sh, uint stride, uchar * RESTRICT dst, uint dw, uint dh)
+{
+    uint wfrac = sw/dw, hfrac = sh/dh, wshift = 0, hshift = 0;
+    while(dw<<wshift < sw) wshift++;
+    while(dh<<hshift < sh) hshift++;
+    uint tshift = wshift + hshift;
+    for(uchar *yend = &src[sh*stride]; src < yend;)
+    {
+        for(uchar *xend = &src[sw*BPP], *xsrc = src; xsrc < xend; xsrc += wfrac*BPP, dst += BPP)
+        {
+            uint t[BPP] = {0};
+            for(uchar *ycur = xsrc, *xend = &ycur[wfrac*BPP], *yend = &src[hfrac*stride];
+                ycur < yend;
+                ycur += stride, xend += stride)
+            {
+                for(uchar *xcur = ycur; xcur < xend; xcur += BPP)
+                    loopi(BPP) t[i] += xcur[i];
+            }
+            loopi(BPP) dst[i] = t[i] >> tshift;
+        }
+        src += hfrac*stride;
+    }
+}
 
-#define FUNCNAME(name) name##3
-#define DEFPIXEL uint OP(r, 0), OP(g, 1), OP(b, 2);
-#define PIXELOP OP(r, 0); OP(g, 1); OP(b, 2);
-#define BPP 3
-#include "scale.h"
+template<int BPP> static void scaletexture(uchar * RESTRICT src, uint sw, uint sh, uint stride, uchar * RESTRICT dst, uint dw, uint dh)
+{
+    uint wfrac = (sw<<12)/dw, hfrac = (sh<<12)/dh, darea = dw*dh, sarea = sw*sh;
+    int over, under;
+    for(over = 0; (darea>>over) > sarea; over++);
+    for(under = 0; (darea<<under) < sarea; under++);
+    uint cscale = clamp(under, over - 12, 12),
+         ascale = clamp(12 + under - over, 0, 24),
+         dscale = ascale + 12 - cscale,
+         area = ((ullong)darea<<ascale)/sarea;
+    dw *= wfrac;
+    dh *= hfrac;
+    for(uint y = 0; y < dh; y += hfrac)
+    {
+        const uint yn = y + hfrac - 1, yi = y>>12, h = (yn>>12) - yi, ylow = ((yn|(-int(h)>>24))&0xFFFU) + 1 - (y&0xFFFU), yhigh = (yn&0xFFFU) + 1;
+        const uchar *ysrc = &src[yi*stride];
+        for(uint x = 0; x < dw; x += wfrac, dst += BPP)
+        {
+            const uint xn = x + wfrac - 1, xi = x>>12, w = (xn>>12) - xi, xlow = ((w+0xFFFU)&0x1000U) - (x&0xFFFU), xhigh = (xn&0xFFFU) + 1;
+            const uchar *xsrc = &ysrc[xi*BPP], *xend = &xsrc[w*BPP];
+            uint t[BPP] = {0};
+            for(const uchar *xcur = &xsrc[BPP]; xcur < xend; xcur += BPP)
+                loopi(BPP) t[i] += xcur[i];
+            loopi(BPP) t[i] = (ylow*(t[i] + ((xsrc[i]*xlow + xend[i]*xhigh)>>12)))>>cscale;
+            if(h)
+            {
+                xsrc += stride;
+                xend += stride;
+                for(uint hcur = h; --hcur; xsrc += stride, xend += stride)
+                {
+                    uint c[BPP] = {0};
+                    for(const uchar *xcur = &xsrc[BPP]; xcur < xend; xcur += BPP)
+                        loopi(BPP) c[i] += xcur[i];
+                    loopi(BPP) t[i] += ((c[i]<<12) + xsrc[i]*xlow + xend[i]*xhigh)>>cscale;
+                }
+                uint c[BPP] = {0};
+                for(const uchar *xcur = &xsrc[BPP]; xcur < xend; xcur += BPP)
+                    loopi(BPP) c[i] += xcur[i];
+                loopi(BPP) t[i] += (yhigh*(c[i] + ((xsrc[i]*xlow + xend[i]*xhigh)>>12)))>>cscale;
+            }
+            loopi(BPP) dst[i] = (t[i] * area)>>dscale;
+        }
+    }
+}
 
-#define FUNCNAME(name) name##4
-#define DEFPIXEL uint OP(r, 0), OP(g, 1), OP(b, 2), OP(a, 3);
-#define PIXELOP OP(r, 0); OP(g, 1); OP(b, 2); OP(a, 3);
-#define BPP 4
-#include "scale.h"
-
-static void scaletexture(uchar *src, uint sw, uint sh, uint bpp, uint pitch, uchar *dst, uint dw, uint dh)
+static void scaletexture(uchar * RESTRICT src, uint sw, uint sh, uint bpp, uint pitch, uchar * RESTRICT dst, uint dw, uint dh)
 {
     if(sw == dw*2 && sh == dh*2)
     {
         switch(bpp)
         {
-            case 1: return halvetexture1(src, sw, sh, pitch, dst);
-            case 2: return halvetexture2(src, sw, sh, pitch, dst);
-            case 3: return halvetexture3(src, sw, sh, pitch, dst);
-            case 4: return halvetexture4(src, sw, sh, pitch, dst);
+            case 1: return halvetexture<1>(src, sw, sh, pitch, dst);
+            case 2: return halvetexture<2>(src, sw, sh, pitch, dst);
+            case 3: return halvetexture<3>(src, sw, sh, pitch, dst);
+            case 4: return halvetexture<4>(src, sw, sh, pitch, dst);
         }
     }
     else if(sw < dw || sh < dh || sw&(sw-1) || sh&(sh-1) || dw&(dw-1) || dh&(dh-1))
     {
         switch(bpp)
         {
-            case 1: return scaletexture1(src, sw, sh, pitch, dst, dw, dh);
-            case 2: return scaletexture2(src, sw, sh, pitch, dst, dw, dh);
-            case 3: return scaletexture3(src, sw, sh, pitch, dst, dw, dh);
-            case 4: return scaletexture4(src, sw, sh, pitch, dst, dw, dh);
+            case 1: return scaletexture<1>(src, sw, sh, pitch, dst, dw, dh);
+            case 2: return scaletexture<2>(src, sw, sh, pitch, dst, dw, dh);
+            case 3: return scaletexture<3>(src, sw, sh, pitch, dst, dw, dh);
+            case 4: return scaletexture<4>(src, sw, sh, pitch, dst, dw, dh);
         }
     }
     else
     {
         switch(bpp)
         {
-            case 1: return shifttexture1(src, sw, sh, pitch, dst, dw, dh);
-            case 2: return shifttexture2(src, sw, sh, pitch, dst, dw, dh);
-            case 3: return shifttexture3(src, sw, sh, pitch, dst, dw, dh);
-            case 4: return shifttexture4(src, sw, sh, pitch, dst, dw, dh);
+            case 1: return shifttexture<1>(src, sw, sh, pitch, dst, dw, dh);
+            case 2: return shifttexture<2>(src, sw, sh, pitch, dst, dw, dh);
+            case 3: return shifttexture<3>(src, sw, sh, pitch, dst, dw, dh);
+            case 4: return shifttexture<4>(src, sw, sh, pitch, dst, dw, dh);
         }
     }
 }
 
-static inline void reorienttexture(uchar *src, int sw, int sh, int bpp, int stride, uchar *dst, bool flipx, bool flipy, bool swapxy, bool normals = false)
+static void reorientnormals(uchar * RESTRICT src, int sw, int sh, int bpp, int stride, uchar * RESTRICT dst, bool flipx, bool flipy, bool swapxy)
 {
     int stridex = bpp, stridey = bpp;
     if(swapxy) stridex *= sh; else stridey *= sw;
@@ -77,17 +134,49 @@ static inline void reorienttexture(uchar *src, int sw, int sh, int bpp, int stri
     {
         for(uchar *curdst = dst, *src = srcrow, *end = &srcrow[sw*bpp]; src < end;)
         {
-            loopk(bpp) curdst[k] = *src++;
-            if(normals)
-            {
-                if(flipx) curdst[0] = 255-curdst[0];
-                if(flipy) curdst[1] = 255-curdst[1];
-                if(swapxy) swap(curdst[0], curdst[1]);
-            }
+            uchar nx = *src++, ny = *src++;
+            if(flipx) nx = 255-nx;
+            if(flipy) ny = 255-ny;
+            if(swapxy) swap(nx, ny);
+            curdst[0] = nx;
+            curdst[1] = ny;
+            curdst[2] = *src++;
+            if(bpp > 3) curdst[3] = *src++;
             curdst += stridex;
         }
         srcrow += stride;
         dst += stridey;
+    }
+}
+
+template<int BPP>
+static inline void reorienttexture(uchar * RESTRICT src, int sw, int sh, int stride, uchar * RESTRICT dst, bool flipx, bool flipy, bool swapxy)
+{
+    int stridex = BPP, stridey = BPP;
+    if(swapxy) stridex *= sh; else stridey *= sw;
+    if(flipx) { dst += (sw-1)*stridex; stridex = -stridex; }
+    if(flipy) { dst += (sh-1)*stridey; stridey = -stridey; }
+    uchar *srcrow = src;
+    loopi(sh)
+    {
+        for(uchar *curdst = dst, *src = srcrow, *end = &srcrow[sw*BPP]; src < end;)
+        {
+            loopk(BPP) curdst[k] = *src++;
+            curdst += stridex;
+        }
+        srcrow += stride;
+        dst += stridey;
+    }
+}
+
+static void reorienttexture(uchar * RESTRICT src, int sw, int sh, int bpp, int stride, uchar * RESTRICT dst, bool flipx, bool flipy, bool swapxy)
+{   
+    switch(bpp)
+    {
+        case 1: return reorienttexture<1>(src, sw, sh, stride, dst, flipx, flipy, swapxy);
+        case 2: return reorienttexture<2>(src, sw, sh, stride, dst, flipx, flipy, swapxy);
+        case 3: return reorienttexture<3>(src, sw, sh, stride, dst, flipx, flipy, swapxy); 
+        case 4: return reorienttexture<4>(src, sw, sh, stride, dst, flipx, flipy, swapxy);
     }
 }
 
@@ -349,7 +438,8 @@ void texreorient(ImageData &s, bool flipx, bool flipy, bool swapxy, int type = T
             break;
         }
     default:
-        reorienttexture(s.data, s.w, s.h, s.bpp, s.pitch, d.data, flipx, flipy, swapxy, type==TEX_NORMAL);
+        if(type==TEX_NORMAL && s.bpp >= 3) reorientnormals(s.data, s.w, s.h, s.bpp, s.pitch, d.data, flipx, flipy, swapxy);
+        else reorienttexture(s.data, s.w, s.h, s.bpp, s.pitch, d.data, flipx, flipy, swapxy);
         break;
     }
     s.replace(d);
@@ -610,12 +700,10 @@ GLenum compressedformat(GLenum format, int w, int h, int force = 0)
 {
     if(usetexcompress && texcompress && force >= 0 && (force || max(w, h) >= texcompress)) switch(format)
     {
-        case GL_RGB4:
         case GL_RGB5:
         case GL_RGB8:
         case GL_RGB: return usetexcompress > 1 ? GL_COMPRESSED_RGB_S3TC_DXT1_EXT : GL_COMPRESSED_RGB;
         case GL_RGB5_A1: return usetexcompress > 1 ? GL_COMPRESSED_RGBA_S3TC_DXT1_EXT : GL_COMPRESSED_RGBA;
-        case GL_RGBA4:
         case GL_RGBA: return usetexcompress > 1 ? GL_COMPRESSED_RGBA_S3TC_DXT5_EXT : GL_COMPRESSED_RGBA;
         case GL_RED:
         case GL_R8: return hasRGTC ? (usetexcompress > 1 ? GL_COMPRESSED_RED_RGTC1 : GL_COMPRESSED_RED) : (usetexcompress > 1 ? GL_COMPRESSED_RGB_S3TC_DXT1_EXT : GL_COMPRESSED_RGB);
@@ -878,8 +966,6 @@ static GLenum textype(GLenum &component, GLenum &format)
             if(!format) format = GL_RG;
             break;
 
-        case GL_R3_G3_B2:
-        case GL_RGB4:
         case GL_RGB5:
         case GL_RGB8:
         case GL_RGB16:
@@ -889,8 +975,6 @@ static GLenum textype(GLenum &component, GLenum &format)
             if(!format) format = GL_RGB;
             break;
 
-        case GL_RGBA2:
-        case GL_RGBA4:
         case GL_RGB5_A1:
         case GL_RGBA8:
         case GL_RGBA16:
@@ -917,6 +1001,7 @@ static GLenum textype(GLenum &component, GLenum &format)
             break;
 
         case GL_ALPHA8:
+        case GL_ALPHA16:
         case GL_COMPRESSED_ALPHA:
             if(!format) format = GL_ALPHA;
             break;
@@ -996,12 +1081,12 @@ hashnameset<Texture> textures;
 
 Texture *notexture = NULL; // used as default, ensured to be loaded
 
-static GLenum texformat(int bpp)
+static GLenum texformat(int bpp, bool swizzle = false)
 {
     switch(bpp)
     {
-        case 1: return hasTRG ? GL_RED : GL_LUMINANCE;
-        case 2: return hasTRG ? GL_RG : GL_LUMINANCE_ALPHA;
+        case 1: return hasTRG && (hasTSW || !glcompat || !swizzle) ? GL_RED : GL_LUMINANCE;
+        case 2: return hasTRG && (hasTSW || !glcompat || !swizzle) ? GL_RG : GL_LUMINANCE_ALPHA;
         case 3: return GL_RGB;
         case 4: return GL_RGBA;
         default: return 0;
@@ -1024,11 +1109,10 @@ static bool alphaformat(GLenum format)
 
 int texalign(const void *data, int w, int bpp)
 {
-    size_t address = size_t(data) | (w*bpp);
-    if(address&1) return 1;
-    if(address&2) return 2;
-    if(address&4) return 4;
-    return 8;
+    int stride = w*bpp;
+    if(stride&1) return 1;
+    if(stride&2) return 2;
+    return 4;
 }
 
 bool floatformat(GLenum format)
@@ -1070,6 +1154,8 @@ static Texture *newtexture(Texture *t, const char *rname, ImageData &s, int clam
         t->w = t->h = t->xs = t->ys = t->bpp = 0;
         return t;
     }
+
+    bool swizzle = !(clamp&0x10000);
     GLenum format;
     if(s.compressed)
     {
@@ -1079,15 +1165,20 @@ static Texture *newtexture(Texture *t, const char *rname, ImageData &s, int clam
     }
     else
     {
-        format = texformat(s.bpp);
+        format = texformat(s.bpp, swizzle);
         t->bpp = s.bpp;
+        if(swizzle && hasTRG && !hasTSW && swizzlemask(format))
+        {
+            swizzleimage(s);
+            format = texformat(s.bpp, swizzle);
+            t->bpp = s.bpp;
+        }
     }
     if(alphaformat(format)) t->type |= Texture::ALPHA;
     t->w = t->xs = s.w;
     t->h = t->ys = s.h;
 
     int filter = !canreduce || reducefilter ? (mipit ? 2 : 1) : 0;
-    bool swizzle = !(clamp&0x10000);
     glGenTextures(1, &t->id);
     if(s.compressed)
     {
@@ -2393,6 +2484,15 @@ int DecalSlot::cancombine(int type) const
     }
 }
 
+bool DecalSlot::shouldpremul(int type) const
+{
+    switch(type)
+    {
+        case TEX_DIFFUSE: return true;
+        default: return false;
+    }
+}
+
 static void addname(vector<char> &key, Slot &slot, Slot::Tex &t, bool combined = false, const char *prefix = NULL)
 {
     if(combined) key.add('&');
@@ -2404,7 +2504,7 @@ static void addname(vector<char> &key, Slot &slot, Slot::Tex &t, bool combined =
 void Slot::load(int index, Slot::Tex &t)
 {
     vector<char> key;
-    addname(key, *this, t);
+    addname(key, *this, t, false, shouldpremul(t.type) ? "<premul>" : NULL);
     Slot::Tex *combine = NULL;
     loopv(sts)
     {
@@ -2446,6 +2546,7 @@ void Slot::load(int index, Slot::Tex &t)
             if(ts.bpp < 3) swizzleimage(ts);
             break;
     }
+    if(!ts.compressed && shouldpremul(t.type)) texpremul(ts);
     t.t = newtexture(NULL, key.getbuf(), ts, wrap, true, true, true, compress);
 }
 
@@ -2710,12 +2811,12 @@ Texture *cubemaploadwildcard(Texture *t, const char *name, bool mipit, bool msg,
     }
     else
     {
-        format = texformat(surface[0].bpp);
+        format = texformat(surface[0].bpp, true);
         t->bpp = surface[0].bpp;
         if(hasTRG && !hasTSW && swizzlemask(format))
         {
             loopi(6) swizzleimage(surface[i]);
-            format = texformat(surface[0].bpp);
+            format = texformat(surface[0].bpp, true);
             t->bpp = surface[0].bpp;
         }
     }

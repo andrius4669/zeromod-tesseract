@@ -43,6 +43,8 @@ void destroyvbo(GLuint vbo)
 
 void genvbo(int type, void *buf, int len, vtxarray **vas, int numva)
 {
+    gle::disable();
+
     GLuint vbo;
     glGenBuffers_(1, &vbo);
     GLenum target = type==VBO_VBUF ? GL_ARRAY_BUFFER : GL_ELEMENT_ARRAY_BUFFER;
@@ -280,6 +282,7 @@ struct vacollect : verthash
     int worldtris, skytris, decaltris;
     vec alphamin, alphamax;
     vec refractmin, refractmax;
+    vec skymin, skymax;
     ivec nogimin, nogimax;
 
     void clear()
@@ -296,8 +299,8 @@ struct vacollect : verthash
         grasstris.setsize(0);
         texs.setsize(0);
         decaltexs.setsize(0);
-        alphamin = refractmin = vec(1e16f, 1e16f, 1e16f);
-        alphamax = refractmax = vec(-1e16f, -1e16f, -1e16f);
+        alphamin = refractmin = skymin = vec(1e16f, 1e16f, 1e16f);
+        alphamax = refractmax = skymax = vec(-1e16f, -1e16f, -1e16f);
         nogimin = ivec(INT_MAX, INT_MAX, INT_MAX);
         nogimax = ivec(INT_MIN, INT_MIN, INT_MIN);
     }
@@ -389,8 +392,9 @@ struct vacollect : verthash
                           b2 = (d11*dp2 - d12*dp1) / denom,
                           b0 = 1 - b1 - b2;
                     v.norm.lerp(n0, n1, n2, b0, b1, b2);
+                    v.norm.w = uchar(127.5f - 127.5f*(f0*b0 + f1*b1 + f2*b2));
                     vec tc = orient.transposedtransform(vec(center).sub(v.pos)).div(size).add(0.5f);
-                    v.tc = vec(tc.x, tc.z, s.fade ? tc.y * s.depth / s.fade * clamp(-4*(f0*b0 + f1*b1 + f2*b2), 0.0f, 1.0f) : s.fade);
+                    v.tc = vec(tc.x, tc.z, s.fade ? tc.y * s.depth / s.fade : 1.0f);
                     v.tangent.lerp(x0, x1, x2, b0, b1, b2);
                     idx[k] = addvert(v);
                 }
@@ -895,6 +899,11 @@ void addcubeverts(VSlot &vslot, int orient, int size, vec *pos, int convex, usho
         loopk(numverts) { vc.alphamin.min(pos[k]); vc.alphamax.max(pos[k]); }
         if(vslot.refractscale > 0) loopk(numverts) { vc.refractmin.min(pos[k]); vc.refractmax.max(pos[k]); }
     }
+    if(texture == DEFAULT_SKY) loopi(numverts) if(pos[i][orient>>1] != ((orient&1)<<worldscale))
+    {       
+        loopk(numverts) { vc.skymin.min(pos[k]); vc.skymax.max(pos[k]); }
+        break;
+    }
 
     sortkey key(texture, vslot.scroll.iszero() ? O_ANY : orient, layer&LAYER_BOTTOM ? layer : LAYER_TOP, envmap, alpha ? (vslot.refractscale > 0 ? ALPHA_REFRACT : (vslot.alphaback ? ALPHA_BACK : ALPHA_FRONT)) : NO_ALPHA);
     addtris(vslot, orient, key, verts, index, numverts, convex, tj);
@@ -1135,8 +1144,8 @@ vtxarray *newva(const ivec &o, int size)
     va->curvfc = VFC_NOT_VISIBLE;
     va->occluded = OCCLUDE_NOTHING;
     va->query = NULL;
-    va->bbmin = va->alphamin = va->refractmin = ivec(-1, -1, -1);
-    va->bbmax = va->alphamax = va->refractmax = ivec(-1, -1, -1);
+    va->bbmin = va->alphamin = va->refractmin = va->skymin = ivec(-1, -1, -1);
+    va->bbmax = va->alphamax = va->refractmax = va->skymax = ivec(-1, -1, -1);
     va->hasmerges = 0;
     va->mergelevel = -1;
 
@@ -1154,6 +1163,12 @@ vtxarray *newva(const ivec &o, int size)
         va->refractmax = ivec(vec(vc.refractmax).mul(8)).add(7).shr(3);
     }
 
+    if(va->sky && vc.skymax.x >= 0)
+    {
+        va->skymin = ivec(vec(vc.skymin).mul(8)).shr(3);
+        va->skymax = ivec(vec(vc.skymax).mul(8)).add(7).shr(3);
+    }
+        
     va->nogimin = vc.nogimin;
     va->nogimax = vc.nogimax;
 
@@ -1476,16 +1491,11 @@ void setva(cube &c, const ivec &co, int size, int csi)
     int maxlevel = -1;
     rendercube(c, co, size, csi, maxlevel);
 
-    ivec bbmin, bbmax;
-
-    calcgeombb(co, size, bbmin, bbmax);
-
     if(size == min(0x1000, worldsize/2) || !vc.emptyva())
     {
         vtxarray *va = newva(co, size);
         ext(c).va = va;
-        va->geommin = bbmin;
-        va->geommax = bbmax;
+        calcgeombb(co, size, va->geommin, va->geommax);
         calcmatbb(va, co, size, vc.matsurfs);
         va->hasmerges = vahasmerges;
         va->mergelevel = vamergemax;
@@ -1500,6 +1510,7 @@ void setva(cube &c, const ivec &co, int size, int csi)
 
 static inline int setcubevisibility(cube &c, const ivec &co, int size)
 {
+    if(isempty(c) && (c.material&MATF_CLIP) != MAT_CLIP) return 0;
     int numvis = 0, vismask = 0, collidemask = 0, checkmask = 0;
     loopi(6)
     {
@@ -1517,7 +1528,7 @@ static inline int setcubevisibility(cube &c, const ivec &co, int size)
                 if(c.texture[i] != DEFAULT_SKY && !(c.ext && c.ext->surfaces[i].numverts&MAXFACEVERTS)) checkmask |= 1<<i;
             }
         }
-        if(facemask&2 && collideface(c, i)) collidemask |= 1<<i;
+        if(facemask&2) collidemask |= 1<<i;
     }
     c.visible = collidemask | (vismask ? (vismask != collidemask ? (checkmask ? 0x80|0x40 : 0x80) : 0x40) : 0);
     return numvis;
@@ -1551,7 +1562,7 @@ int updateva(cube *c, const ivec &co, int size, int csi)
                 count += updateva(c[i].children, o, size/2, csi-1);
                 if(c[i].ext && c[i].ext->ents) --entdepth;
             }
-            else if(!isempty(c[i])) count += setcubevisibility(c[i], o, size);
+            else count += setcubevisibility(c[i], o, size);
             int tcount = count + (csi <= MAXMERGELEVEL ? vamerges[csi].length() : 0);
             if(tcount > vafacemax || (tcount >= vafacemin && size >= vacubesize) || size == min(0x1000, worldsize/2))
             {
@@ -1679,7 +1690,6 @@ void octarender()                               // creates va s for all leaf cub
         explicitsky += va->sky;
     }
 
-    extern vtxarray *visibleva;
     visibleva = NULL;
 }
 
@@ -1712,6 +1722,8 @@ void precachetextures()
 
 void allchanged(bool load)
 {
+    if(mainmenu && !isconnected()) load = false;
+    if(load) initlights();
     renderprogress(0, "clearing vertex arrays...");
     clearvas(worldroot);
     resetqueries();

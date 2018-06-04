@@ -582,12 +582,7 @@ struct Texture
     uchar *alphamask;
 
     Texture() : alphamask(NULL) {}
-
-    int swizzle() const { extern bool hasTRG, hasTSW; return hasTRG && !hasTSW ? (bpp==1 ? 0 : (bpp==2 ? 1 : -1)) : -1; }
 };
-
-#define SETSWIZZLE(name, tex) SETVARIANT(name, (tex) ? (tex)->swizzle() : -1, 0)
-#define SETVARIANTSWIZZLE(name, tex, row) SETVARIANT(name, ((row) > 0 ? 1 : 0) + ((tex) ? (tex)->swizzle() : -1), row)
 
 enum
 {
@@ -704,6 +699,7 @@ struct Slot
     virtual VSlot &emptyvslot();
 
     virtual int cancombine(int type) const;
+    virtual bool shouldpremul(int type) const { return false; }
 
     int findtextype(int type, int last = -1) const;
 
@@ -792,6 +788,7 @@ struct DecalSlot : Slot, VSlot
     VSlot &emptyvslot() { return *this; }
 
     int cancombine(int type) const;
+    bool shouldpremul(int type) const;
 
     void reset()
     {
@@ -856,6 +853,7 @@ extern bool unpackvslot(ucharbuf &buf, VSlot &dst, bool delta);
 
 extern Slot dummyslot;
 extern VSlot dummyvslot;
+extern DecalSlot dummydecalslot;
 extern vector<Slot *> slots;
 extern vector<VSlot *> vslots;
 

@@ -139,8 +139,6 @@ void drawenvbox(Texture **sky = NULL, float z1clip = 0.0f, float z2clip = 1.0f, 
                        1.0f, 0.0f, -w,  w, w,
                        0.0f, 0.0f, -w, -w, w,
                        0.0f, 1.0f,  w, -w, w, sky[5]);
-
-    gle::disable();
 }
 
 void drawenvoverlay(Texture *overlay = NULL, float tx = 0, float ty = 0)
@@ -172,13 +170,12 @@ void drawenvoverlay(Texture *overlay = NULL, float tx = 0, float ty = 0)
         p.rotate_around_z((-2.0f*M_PI*i)/cloudsubdiv);
         gle::attribf(p.x*psz, p.y*psz, z);
             gle::attribf(tx - p.x*tsz, ty + p.y*tsz);
-            gle::attribf(color.r, color.g, color.b, cloudalpha);
+            gle::attrib(color, cloudalpha);
         gle::attribf(p.x*w, p.y*w, z);
             gle::attribf(tx - p.x*tsz2, ty + p.y*tsz2);
-            gle::attribf(color.r, color.g, color.b, 0);
+            gle::attrib(color, 0.0f);
     }
     xtraverts += gle::end();
-    gle::disable();
 }
 
 FVARR(fogdomeheight, -1, -0.5f, 1);
@@ -297,12 +294,12 @@ namespace fogdome
         }
 
         if(!vbuf) glGenBuffers_(1, &vbuf);
-        glBindBuffer_(GL_ARRAY_BUFFER, vbuf);
+        gle::bindvbo(vbuf);
         glBufferData_(GL_ARRAY_BUFFER, numverts*sizeof(vert), verts, GL_STATIC_DRAW);
         DELETEA(verts);
 
         if(!ebuf) glGenBuffers_(1, &ebuf);
-        glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, ebuf);
+        gle::bindebo(ebuf);
         glBufferData_(GL_ELEMENT_ARRAY_BUFFER, (numindices + capindices)*sizeof(GLushort), indices, GL_STATIC_DRAW);
         DELETEA(indices);
     }
@@ -328,8 +325,8 @@ namespace fogdome
             lastclipz = fogdomeclip;
         }
 
-        glBindBuffer_(GL_ARRAY_BUFFER, vbuf);
-        glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, ebuf);
+        gle::bindvbo(vbuf);
+        gle::bindebo(ebuf);
 
         gle::vertexpointer(sizeof(vert), &verts->pos);
         gle::colorpointer(sizeof(vert), &verts->color);
@@ -343,8 +340,8 @@ namespace fogdome
         gle::disablevertex();
         gle::disablecolor();
 
-        glBindBuffer_(GL_ARRAY_BUFFER, 0);
-        glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, 0);
+        gle::clearvbo();
+        gle::clearebo();
     }
 }
 
@@ -431,7 +428,6 @@ static void drawatmosphere()
     gle::attribf(-1, -1, 1);
     gle::attribf(1, -1, 1);
     xtraverts += gle::end();
-    gle::disable();
 }
 
 VAR(showsky, 0, 1, 1);
@@ -448,7 +444,18 @@ bool limitsky()
 
 void drawskybox(bool clear)
 {
-    if(limitsky())
+    bool limited = false;
+    if(limitsky()) for(vtxarray *va = visibleva; va; va = va->next)
+    {
+        if(va->sky && va->occluded < OCCLUDE_BB &&
+           ((va->skymax.x >= 0 && isvisiblebb(va->skymin, ivec(va->skymax).sub(va->skymin)) != VFC_NOT_VISIBLE) ||
+            !insideworld(camera1->o)))
+        {
+            limited = true;
+            break;
+        }
+    }
+    if(limited)
     {
         glDisable(GL_DEPTH_TEST);
     }
@@ -471,10 +478,10 @@ void drawskybox(bool clear)
     {
         if(ldrscale < 1 && (skyboxoverbrightmin != 1 || (skyboxoverbright > 1 && skyboxoverbrightthreshold < 1)))
         {
-            SETSWIZZLE(skyboxoverbright, sky[0]);
+            SETSHADER(skyboxoverbright);
             LOCALPARAMF(overbrightparams, skyboxoverbrightmin, max(skyboxoverbright, skyboxoverbrightmin), skyboxoverbrightthreshold);
         }
-        else SETSWIZZLE(skybox, sky[0]);
+        else SETSHADER(skybox);
 
         gle::color(skyboxcolour);
 
@@ -507,7 +514,7 @@ void drawskybox(bool clear)
 
     if(cloudbox[0])
     {
-        SETSWIZZLE(skybox, clouds[0]);
+        SETSHADER(skybox);
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -527,7 +534,7 @@ void drawskybox(bool clear)
 
     if(cloudlayer[0] && cloudheight)
     {
-        SETSWIZZLE(skybox, cloudoverlay);
+        SETSHADER(skybox);
 
         glDisable(GL_CULL_FACE);
 
@@ -554,7 +561,7 @@ void drawskybox(bool clear)
 
     if(clampsky) glDepthRange(0, 1);
 
-    if(limitsky())
+    if(limited)
     {
         glEnable(GL_DEPTH_TEST);
     }

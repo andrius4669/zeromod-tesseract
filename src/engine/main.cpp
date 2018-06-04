@@ -19,7 +19,6 @@ void cleanup()
     extern void clear_models();  clear_models();
     extern void clear_sound();   clear_sound();
     closelogfile();
-    ovr::destroy();
     #ifdef __APPLE__
         if(screen) SDL_SetWindowFullscreen(screen, 0);
     #endif
@@ -191,10 +190,7 @@ void renderbackgroundview(int w, int h, const char *caption, Texture *mapshot, c
         int tw = text_width(caption);
         float tsz = 0.04f*min(w, h)/FONTH,
               tx = 0.5f*(w - tw*tsz), ty = h - 0.075f*1.5f*min(w, h) - FONTH*tsz;
-        pushhudmatrix();
-        hudmatrix.translate(tx, ty, 0);
-        hudmatrix.scale(tsz, tsz, 1);
-        flushhudmatrix();
+        pushhudtranslate(tx, ty, tsz);
         draw_text(caption, 0, 0);
         pophudmatrix();
     }
@@ -221,31 +217,36 @@ void renderbackgroundview(int w, int h, const char *caption, Texture *mapshot, c
         if(mapname)
         {
             float tw = text_widthf(mapname), tsz = sz/(8*FONTH), tx = max(0.5f*(mw*msz - tw*tsz), 0.0f);
-            pushhudmatrix();
-            hudmatrix.translate(x+mx+tx, y, 0);
-            hudmatrix.scale(tsz, tsz, 1);
-            flushhudmatrix();
+            pushhudtranslate(x+mx+tx, y, tsz);
             draw_text(mapname, 0, 0);
             pophudmatrix();
             my = 1.5f*FONTH*tsz;
         }
         if(mapinfo)
         {
-            pushhudmatrix();
-            hudmatrix.translate(x+mx, y+my, 0);
-            hudmatrix.scale(msz, msz, 1);
-            flushhudmatrix();
+            pushhudtranslate(x+mx, y+my, msz);
             draw_text(mapinfo, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF, -1, infowidth);
             pophudmatrix();
         }
     }
 
     glDisable(GL_BLEND);
-
-    gle::disable();
 }
 
 VAR(menumute, 0, 1, 1);
+
+void setbackgroundinfo(const char *caption = NULL, Texture *mapshot = NULL, const char *mapname = NULL, const char *mapinfo = NULL)
+{
+    renderedframe = false;
+    copystring(backgroundcaption, caption ? caption : "");
+    backgroundmapshot = mapshot;
+    copystring(backgroundmapname, mapname ? mapname : "");
+    if(mapinfo != backgroundmapinfo)
+    {
+        DELETEA(backgroundmapinfo);
+        if(mapinfo) backgroundmapinfo = newstring(mapinfo);
+    }
+}
 
 void renderbackground(const char *caption, Texture *mapshot, const char *mapname, const char *mapinfo, bool force)
 {
@@ -266,42 +267,20 @@ void renderbackground(const char *caption, Texture *mapshot, const char *mapname
 
     loopi(3)
     {
-        if(ovr::enabled)
-        {
-            aspect = forceaspect ? forceaspect : hudw/float(hudh);
-            for(viewidx = 0; viewidx < 2; viewidx++, hudx += hudw)
-            {
-                if(!i)
-                {
-                    glBindFramebuffer_(GL_FRAMEBUFFER, ovr::lensfbo[viewidx]);
-                    glViewport(0, 0, hudw, hudh);
-                    glClearColor(0, 0, 0, 0);
-                    glClear(GL_COLOR_BUFFER_BIT);
-                    renderbackgroundview(w, h, caption, mapshot, mapname, mapinfo);
-                }
-                ovr::warp();
-            }
-            viewidx = 0;
-            hudx = 0;
-        }
-        else renderbackgroundview(w, h, caption, mapshot, mapname, mapinfo);
+        renderbackgroundview(w, h, caption, mapshot, mapname, mapinfo);
         swapbuffers(false);
     }
 
-    renderedframe = false;
-    copystring(backgroundcaption, caption ? caption : "");
-    backgroundmapshot = mapshot;
-    copystring(backgroundmapname, mapname ? mapname : "");
-    if(mapinfo != backgroundmapinfo)
-    {
-        DELETEA(backgroundmapinfo);
-        if(mapinfo) backgroundmapinfo = newstring(mapinfo);
-    }
+    setbackgroundinfo(caption, mapshot, mapname, mapinfo);
 }
 
-void restorebackground(int w, int h)
+void restorebackground(int w, int h, bool force = false)
 {
-    if(renderedframe) return;
+    if(renderedframe)
+    {
+        if(!force) return;
+        setbackgroundinfo();
+    }
     renderbackgroundview(w, h, backgroundcaption[0] ? backgroundcaption : NULL, backgroundmapshot, backgroundmapname[0] ? backgroundmapname : NULL, backgroundmapinfo);
 }
 
@@ -344,22 +323,30 @@ void renderprogressview(int w, int h, float bar, const char *text)   // also use
         int tw = text_width(text);
         float tsz = bh*0.6f/FONTH;
         if(tw*tsz > mw) tsz = mw/tw;
-        pushhudmatrix();
-        hudmatrix.translate(bx+sw, by + (bh - FONTH*tsz)/2, 0);
-        hudmatrix.scale(tsz, tsz, 1);
-        flushhudmatrix();
+    
+        pushhudtranslate(bx+sw, by + (bh - FONTH*tsz)/2, tsz);
         draw_text(text, 0, 0);
         pophudmatrix();
     }
 
     glDisable(GL_BLEND);
-
-    gle::disable();
 }
+
+VAR(progressbackground, 0, 0, 1);
 
 void renderprogress(float bar, const char *text, bool background)   // also used during loading
 {
     if(!inbetweenframes || drawtex) return;
+
+    extern int menufps, maxfps;
+    int fps = menufps ? (maxfps ? min(maxfps, menufps) : menufps) : maxfps;
+    if(fps)
+    {
+        static int lastprogress = 0;
+        int ticks = SDL_GetTicks(), diff = ticks - lastprogress;
+        if(bar > 0 && diff >= 0 && diff < (1000 + fps-1)/fps) return;
+        lastprogress = ticks;
+    }
 
     clientkeepalive();      // make sure our connection doesn't time out while loading maps etc.
 
@@ -372,30 +359,11 @@ void renderprogress(float bar, const char *text, bool background)   // also used
     getbackgroundres(w, h);
     gettextres(w, h);
 
-    if(ovr::enabled)
-    {
-        aspect = forceaspect ? forceaspect : hudw/float(hudh);
-        for(viewidx = 0; viewidx < 2; viewidx++, hudx += hudw)
-        {
-            glBindFramebuffer_(GL_FRAMEBUFFER, ovr::lensfbo[viewidx]);
-            glViewport(0, 0, hudw, hudh);
-            if(background)
-            {
-                glClearColor(0, 0, 0, 0);
-                glClear(GL_COLOR_BUFFER_BIT);
-                restorebackground(w, h);
-            }
-            renderprogressview(w, h, bar, text);
-            ovr::warp();
-        }
-        viewidx = 0;
-        hudx = 0;
-    }
-    else
-    {
-        if(background) restorebackground(w, h);
-        renderprogressview(w, h, bar, text);
-    }
+    extern int mesa_swap_bug, curvsync;
+    bool forcebackground = progressbackground || (mesa_swap_bug && (curvsync || totalmillis==1));
+    if(background || forcebackground) restorebackground(w, h, forcebackground);
+
+    renderprogressview(w, h, bar, text);
     swapbuffers(false);
 }
 
@@ -403,6 +371,8 @@ VARNP(relativemouse, userelativemouse, 0, 1, 1);
 
 bool shouldgrab = false, grabinput = false, minimized = false, canrelativemouse = true, relativemouse = false;
 int keyrepeatmask = 0, textinputmask = 0;
+Uint32 textinputtime = 0;
+VAR(textinputfilter, 0, 5, 1000);
 
 void keyrepeat(bool on, int mask)
 {
@@ -414,7 +384,11 @@ void textinput(bool on, int mask)
 {
     if(on)
     {
-        if(!textinputmask) SDL_StartTextInput();
+        if(!textinputmask)
+        {
+            SDL_StartTextInput();
+            textinputtime = SDL_GetTicks();
+        }
         textinputmask |= mask;
     }
     else
@@ -470,7 +444,6 @@ void setfullscreen(bool enable)
         if(initwindowpos)
         {
             int winx = SDL_WINDOWPOS_CENTERED, winy = SDL_WINDOWPOS_CENTERED;
-            if(ovr::enabled) winx = winy = 0;
             SDL_SetWindowPosition(screen, winx, winy);
             initwindowpos = false;
         }
@@ -508,10 +481,10 @@ static void setgamma(int val)
 }
 
 static int curgamma = 100;
-VARFP(gamma, 30, 100, 300,
+VARFNP(gamma, reqgamma, 30, 100, 300,
 {
-    if(initing || gamma == curgamma) return;
-    curgamma = gamma;
+    if(initing || reqgamma == curgamma) return;
+    curgamma = reqgamma;
     setgamma(curgamma);
 });
 
@@ -526,11 +499,13 @@ void cleargamma()
     if(curgamma != 100 && screen) SDL_SetWindowBrightness(screen, 1.0f);
 }
 
+int curvsync = -1;
 void restorevsync()
 {
     if(initing || !glcontext) return;
     extern int vsync, vsynctear;
-    SDL_GL_SetSwapInterval(vsync ? (vsynctear ? -1 : 1) : 0);
+    if(!SDL_GL_SetSwapInterval(vsync ? (vsynctear ? -1 : 1) : 0))
+        curvsync = vsync;
 }
 
 VARFP(vsync, 0, 0, 1, restorevsync());
@@ -550,9 +525,10 @@ void setupscreen()
         SDL_DestroyWindow(screen);
         screen = NULL;
     }
+    curvsync = -1;
 
-    SDL_DisplayMode desktop;
-    if(SDL_GetDesktopDisplayMode(0, &desktop) < 0) fatal("failed querying desktop display mode: %s", SDL_GetError());
+    SDL_Rect desktop;
+    if(SDL_GetDisplayBounds(0, &desktop) < 0) fatal("failed querying desktop bounds: %s", SDL_GetError());
     desktopw = desktop.w;
     desktoph = desktop.h;
 
@@ -569,8 +545,8 @@ void setupscreen()
         flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
         initwindowpos = true;
     }
-    if(ovr::enabled) winx = winy = 0;
 
+    SDL_GL_ResetAttributes();
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
@@ -580,23 +556,21 @@ void setupscreen()
     SDL_SetWindowMinimumSize(screen, SCR_MINW, SCR_MINH);
     SDL_SetWindowMaximumSize(screen, SCR_MAXW, SCR_MAXH);
 
-    static const struct { int major, minor; } coreversions[] = { { 4, 0 }, { 3, 3 }, { 3, 2 }, { 3, 1 }, { 3, 0 } };
-    loopi(sizeof(coreversions)/sizeof(coreversions[0]))
+#ifdef __APPLE__
+    static const int glversions[] = { 32, 20 };
+#else
+    static const int glversions[] = { 40, 33, 32, 31, 30, 20 };
+#endif
+    loopi(sizeof(glversions)/sizeof(glversions[0]))
     {
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, coreversions[i].major);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, coreversions[i].minor);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        glcompat = glversions[i] <= 30 ? 1 : 0;
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, glversions[i] / 10);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, glversions[i] % 10);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, glversions[i] >= 32 ? SDL_GL_CONTEXT_PROFILE_CORE : 0); 
         glcontext = SDL_GL_CreateContext(screen);
         if(glcontext) break;
     }
-    if(!glcontext)
-    {
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0);
-        glcontext = SDL_GL_CreateContext(screen);
-        if(!glcontext) fatal("failed to create OpenGL context: %s", SDL_GetError());
-    }
+    if(!glcontext) fatal("failed to create OpenGL context: %s", SDL_GetError());
 
     SDL_GetWindowSize(screen, &screenw, &screenh);
     renderw = min(scr_w, screenw);
@@ -648,7 +622,6 @@ void resetgl()
     initgbuffer();
     reloadshaders();
     reloadtextures();
-    initlights();
     allchanged(true);
 }
 
@@ -768,12 +741,13 @@ void checkinput()
                 return;
 
             case SDL_TEXTINPUT:
-            {
-                uchar buf[SDL_TEXTINPUTEVENT_TEXT_SIZE+1];
-                size_t len = decodeutf8(buf, sizeof(buf)-1, (const uchar *)event.text.text, strlen(event.text.text));
-                if(len > 0) { buf[len] = '\0'; processtextinput((const char *)buf, len); }
+                if(textinputmask && int(event.text.timestamp-textinputtime) >= textinputfilter)
+                {   
+                    uchar buf[SDL_TEXTINPUTEVENT_TEXT_SIZE+1];
+                    size_t len = decodeutf8(buf, sizeof(buf)-1, (const uchar *)event.text.text, strlen(event.text.text));
+                    if(len > 0) { buf[len] = '\0'; processtextinput((const char *)buf, len); }
+                }
                 break;
-            }
 
             case SDL_KEYDOWN:
             case SDL_KEYUP:
@@ -862,6 +836,7 @@ void checkinput()
 void swapbuffers(bool overlay)
 {
     recorder::capture(overlay);
+    gle::disable();
     SDL_GL_SwapWindow(screen);
 }
 
@@ -890,6 +865,26 @@ void limitfps(int &millis, int curmillis)
         }
     }
 }
+
+#ifdef WIN32
+// Force Optimus setups to use the NVIDIA GPU
+extern "C"
+{
+#ifdef __GNUC__
+__attribute__((dllexport))    
+#else
+__declspec(dllexport)
+#endif
+    DWORD NvOptimusEnablement = 1;
+
+#ifdef __GNUC__
+__attribute__((dllexport))
+#else
+__declspec(dllexport)
+#endif
+    DWORD AmdPowerXpressRequestHighPerformance = 1;
+}
+#endif
 
 #if defined(WIN32) && !defined(_DEBUG) && !defined(__GNUC__)
 void stackdumper(unsigned int type, EXCEPTION_POINTERS *ep)
@@ -1034,35 +1029,32 @@ int main(int argc, char **argv)
     char *load = NULL, *initscript = NULL;
 
     initing = INIT_RESET;
-    for(int i = 1; i<argc; i++)
+    // set home dir first
+    for(int i = 1; i<argc; i++) if(argv[i][0]=='-' && argv[i][1] == 'u') { sethomedir(&argv[i][2]); break; }
+    // set log after home dir, but before anything else
+    for(int i = 1; i<argc; i++) if(argv[i][0]=='-' && argv[i][1] == 'g')
     {
-        if(argv[i][0]=='-') switch(argv[i][1])
-        {
-            case 'u':
-            {
-                const char *dir = sethomedir(&argv[i][2]);
-                if(dir) logoutf("Using home directory: %s", dir);
-                break;
-            }
-        }
+        const char *file = argv[i][2] ? &argv[i][2] : "log.txt";
+        setlogfile(file);
+        logoutf("Setting log file: %s", file);
+        break;
     }
     execfile("config/init.cfg", false);
     for(int i = 1; i<argc; i++)
     {
         if(argv[i][0]=='-') switch(argv[i][1])
         {
-            case 'u': /* parsed first */ break;
+            case 'u': if(homedir[0]) logoutf("Using home directory: %s", homedir); break;
             case 'k':
             {
                 const char *dir = addpackagedir(&argv[i][2]);
                 if(dir) logoutf("Adding package directory: %s", dir);
                 break;
             }
-            case 'g': logoutf("Setting log file: %s", &argv[i][2]); setlogfile(&argv[i][2]); break;
+            case 'g': break;
             case 'd': dedicated = atoi(&argv[i][2]); if(dedicated<=0) dedicated = 2; break;
             case 'w': scr_w = clamp(atoi(&argv[i][2]), SCR_MINW, SCR_MAXW); if(!findarg(argc, argv, "-h")) scr_h = -1; break;
             case 'h': scr_h = clamp(atoi(&argv[i][2]), SCR_MINH, SCR_MAXH); if(!findarg(argc, argv, "-w")) scr_w = -1; break;
-            case 'v': vsync = atoi(&argv[i][2]); if(vsync < 0) { vsynctear = 1; vsync = 1; } else vsynctear = 0; break;
             case 'f': fullscreen = atoi(&argv[i][2]); break;
             case 'l':
             {
@@ -1084,12 +1076,7 @@ int main(int argc, char **argv)
     {
         logoutf("init: sdl");
 
-        int par = 0;
-        #ifdef _DEBUG
-        par = SDL_INIT_NOPARACHUTE;
-        #endif
-
-        if(SDL_Init(SDL_INIT_TIMER|SDL_INIT_VIDEO|SDL_INIT_AUDIO|par)<0) fatal("Unable to initialize SDL: %s", SDL_GetError());
+        if(SDL_Init(SDL_INIT_TIMER|SDL_INIT_VIDEO|SDL_INIT_AUDIO)<0) fatal("Unable to initialize SDL: %s", SDL_GetError());
     }
 
     logoutf("init: net");
@@ -1208,7 +1195,6 @@ int main(int argc, char **argv)
         updatetime();
 
         checkinput();
-        ovr::update();
         UI::update();
         menuprocess();
         tryedit();

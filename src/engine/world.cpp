@@ -50,8 +50,8 @@ bool getentboundingbox(const extentity &e, ivec &o, ivec &r)
                 decalboundbox(e, s, center, radius);
                 center.add(e.o);
                 radius.max(entselradius);
-                o = vec(center).sub(radius);
-                r = vec(center).add(radius).add(1);
+                o = ivec(vec(center).sub(radius));
+                r = ivec(vec(center).add(radius).add(1));
                 break;
             }
         case ET_MAPMODEL:
@@ -61,14 +61,14 @@ bool getentboundingbox(const extentity &e, ivec &o, ivec &r)
                 mmboundbox(e, m, center, radius);
                 center.add(e.o);
                 radius.max(entselradius);
-                o = vec(center).sub(radius);
-                r = vec(center).add(radius).add(1);
+                o = ivec(vec(center).sub(radius));
+                r = ivec(vec(center).add(radius).add(1));
                 break;
             }
         // invisible mapmodels use entselradius
         default:
-            o = vec(e.o).sub(entselradius);
-            r = vec(e.o).add(entselradius+1);
+            o = ivec(vec(e.o).sub(entselradius));
+            r = ivec(vec(e.o).add(entselradius+1));
             break;
     }
     return true;
@@ -198,7 +198,7 @@ void modifyoctaentity(int flags, int id, extentity &e, cube *c, const ivec &cor,
 }
 
 vector<int> outsideents;
-int spotlights = 0, volumetriclights = 0;
+int spotlights = 0, volumetriclights = 0, nospeclights = 0;
 
 static bool modifyoctaent(int flags, int id, extentity &e)
 {
@@ -227,7 +227,11 @@ static bool modifyoctaent(int flags, int id, extentity &e)
     e.flags ^= EF_OCTA;
     switch(e.type)
     {
-        case ET_LIGHT: clearlightcache(id); if(e.attr5&L_VOLUMETRIC) { if(flags&MODOE_ADD) volumetriclights++; else --volumetriclights; } break;
+        case ET_LIGHT:
+            clearlightcache(id);
+            if(e.attr5&L_VOLUMETRIC) { if(flags&MODOE_ADD) volumetriclights++; else --volumetriclights; }
+            if(e.attr5&L_NOSPEC) { if(!(flags&MODOE_ADD ? nospeclights++ : --nospeclights)) cleardeferredlightshaders(); }
+            break;
         case ET_SPOTLIGHT: if(!(flags&MODOE_ADD ? spotlights++ : --spotlights)) { cleardeferredlightshaders(); cleanupvolumetric(); } break;
         case ET_PARTICLES: clearparticleemitters(); break;
         case ET_DECAL: if(flags&MODOE_CHANGED) changed(o, r, false); break;
@@ -268,26 +272,26 @@ void entitiesinoctanodes()
     loopv(ents) modifyoctaent(MODOE_ADD, i, *ents[i]);
 }
 
-static inline void findents(octaentities &oe, int low, int high, bool notspawned, const vec &pos, const vec &radius, vector<int> &found)
+static inline void findents(octaentities &oe, int low, int high, bool notspawned, const vec &pos, const vec &invradius, vector<int> &found)
 {
     vector<extentity *> &ents = entities::getents();
     loopv(oe.other)
     {
         int id = oe.other[i];
         extentity &e = *ents[id];
-        if(e.type >= low && e.type <= high && (e.spawned() || notspawned) && vec(e.o).mul(radius).squaredlen() <= 1) found.add(id);
+        if(e.type >= low && e.type <= high && (e.spawned() || notspawned) && vec(e.o).sub(pos).mul(invradius).squaredlen() <= 1) found.add(id);
     }
 }
 
-static inline void findents(cube *c, const ivec &o, int size, const ivec &bo, const ivec &br, int low, int high, bool notspawned, const vec &pos, const vec &radius, vector<int> &found)
+static inline void findents(cube *c, const ivec &o, int size, const ivec &bo, const ivec &br, int low, int high, bool notspawned, const vec &pos, const vec &invradius, vector<int> &found)
 {
     loopoctabox(o, size, bo, br)
     {
-        if(c[i].ext && c[i].ext->ents) findents(*c[i].ext->ents, low, high, notspawned, pos, radius, found);
+        if(c[i].ext && c[i].ext->ents) findents(*c[i].ext->ents, low, high, notspawned, pos, invradius, found);
         if(c[i].children && size > octaentsize)
         {
             ivec co(i, o, size);
-            findents(c[i].children, co, size>>1, bo, br, low, high, notspawned, pos, radius, found);
+            findents(c[i].children, co, size>>1, bo, br, low, high, notspawned, pos, invradius, found);
         }
     }
 }
@@ -295,8 +299,8 @@ static inline void findents(cube *c, const ivec &o, int size, const ivec &bo, co
 void findents(int low, int high, bool notspawned, const vec &pos, const vec &radius, vector<int> &found)
 {
     vec invradius(1/radius.x, 1/radius.y, 1/radius.z);
-    ivec bo = vec(pos).sub(radius).sub(1),
-         br = vec(pos).add(radius).add(1);
+    ivec bo(vec(pos).sub(radius).sub(1)),
+         br(vec(pos).add(radius).add(1));
     int diff = (bo.x^br.x) | (bo.y^br.y) | (bo.z^br.z) | octaentsize,
         scale = worldscale-1;
     if(diff&~((1<<scale)-1) || uint(bo.x|bo.y|bo.z|br.x|br.y|br.z) >= uint(worldsize))
@@ -577,6 +581,7 @@ void entselectionbox(const entity &e, vec &eo, vec &es)
 VAR(entselsnap, 0, 0, 1);
 VAR(entmovingshadow, 0, 1, 1);
 
+extern void boxs(int orient, vec o, const vec &s, float size);
 extern void boxs(int orient, vec o, const vec &s);
 extern void boxs3D(const vec &o, vec s, int g);
 extern bool editmoveplane(const vec &o, const vec &ray, int d, float off, vec &handle, vec &dest, bool first);
@@ -599,7 +604,7 @@ void entdrag(const vec &ray)
         if(!editmoveplane(e.o, ray, d, eo[d] + (dc ? es[d] : 0), handle, dest, entmoving==1))
             return;
 
-        ivec g = dest;
+        ivec g(dest);
         int z = g[d]&(~(sel.grid-1));
         g.add(sel.grid/2).mask(~(sel.grid-1));
         g[d] = z;
@@ -863,6 +868,7 @@ void renderentselection(const vec &o, const vec &ray, bool entmoving)
         }
         gle::colorub(200,0,0);
         boxs(entorient, eo, es);
+        boxs(entorient, eo, es, clamp(0.015f*camera1->o.dist(eo)*tan(fovy*0.5f*RAD), 0.1f, 1.0f));
     }
 
     if(showentradius)
@@ -875,8 +881,6 @@ void renderentselection(const vec &o, const vec &ray, bool entmoving)
         loopv(entgroup) entfocus(entgroup[i], renderentradius(e, true));
         if(enthover>=0) entfocus(enthover, renderentradius(e, true));
     }
-
-    gle::disable();
 }
 
 bool enttoggle(int id)
@@ -1355,7 +1359,6 @@ void findplayerspawn(dynent *d, int forceent, int tag) // place at random spawn
         d->o.z += 1;
         entinmap(d);
     }
-    if(d == player) ovr::reset();
 }
 
 void splitocta(cube *c, int size)
@@ -1387,12 +1390,12 @@ void resetmap()
     outsideents.setsize(0);
     spotlights = 0;
     volumetriclights = 0;
+    nospeclights = 0;
 }
 
 void startmap(const char *name)
 {
     game::startmap(name);
-    ovr::reset();
 }
 
 bool emptymap(int scale, bool force, const char *mname, bool usecfg)    // main empty world creation routine
@@ -1425,8 +1428,7 @@ bool emptymap(int scale, bool force, const char *mname, bool usecfg)    // main 
         identflags &= ~IDF_OVERRIDDEN;
     }
 
-    initlights();
-    allchanged(usecfg);
+    allchanged(true);
 
     startmap(mname);
 

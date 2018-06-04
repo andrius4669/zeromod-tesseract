@@ -2,6 +2,25 @@
 
 #include "engine.h"
 
+void validmapname(char *dst, const char *src, const char *prefix, const char *alt, size_t maxlen)
+{
+    if(prefix) while(*prefix) *dst++ = *prefix++;
+    const char *start = dst;
+    if(src) loopi(maxlen)
+    {
+        char c = *src++;
+        if(iscubealnum(c) || c == '_' || c == '-' || c == '/' || c == '\\') *dst++ = c;
+        else break;
+    }
+    if(dst > start) *dst = '\0';
+    else if(dst != alt) copystring(dst, alt, maxlen);
+}
+
+void fixmapname(char *name)
+{
+    validmapname(name, name, NULL, "");
+}
+
 static void fixent(entity &e, int version)
 {
     if(version <= 0)
@@ -45,7 +64,9 @@ static bool loadmapheader(stream *f, const char *ogzname, mapheader &hdr, octahe
 
 bool loadents(const char *fname, vector<entity> &ents, uint *crc)
 {
-    defformatstring(ogzname, "media/map/%s.ogz", fname);
+    string name;
+    validmapname(name, fname);
+    defformatstring(ogzname, "media/map/%s.ogz", name);
     path(ogzname);
     stream *f = opengzfile(ogzname, "rb");
     if(!f) return false;
@@ -120,18 +141,22 @@ VARP(savebak, 0, 2, 2);
 
 void setmapfilenames(const char *fname, const char *cname = NULL)
 {
-    formatstring(ogzname, "media/map/%s.ogz", fname);
-    if(savebak==1) formatstring(bakname, "media/map/%s.BAK", fname);
+    string name;
+    validmapname(name, fname);
+    formatstring(ogzname, "media/map/%s.ogz", name);
+    formatstring(picname, "media/map/%s.png", name);
+    if(savebak==1) formatstring(bakname, "media/map/%s.BAK", name);
     else
     {
         string baktime;
         time_t t = time(NULL);
         size_t len = strftime(baktime, sizeof(baktime), "%Y-%m-%d_%H.%M.%S", localtime(&t));
         baktime[min(len, sizeof(baktime)-1)] = '\0';
-        formatstring(bakname, "media/map/%s_%s.BAK", fname, baktime);
+        formatstring(bakname, "media/map/%s_%s.BAK", name, baktime);
     }
-    formatstring(cfgname, "media/map/%s.cfg", cname ? cname : fname);
-    formatstring(picname, "media/map/%s.png", fname);
+
+    validmapname(name, cname ? cname : fname);
+    formatstring(cfgname, "media/map/%s.cfg", name);
 
     path(ogzname);
     path(bakname);
@@ -142,9 +167,9 @@ void setmapfilenames(const char *fname, const char *cname = NULL)
 void mapcfgname()
 {
     const char *mname = game::getclientmap();
-    if(!*mname) mname = "untitled";
-
-    defformatstring(cfgname, "media/map/%s.cfg", mname);
+    string name;
+    validmapname(name, mname);
+    defformatstring(cfgname, "media/map/%s.cfg", name);
     path(cfgname);
     result(cfgname);
 }
@@ -315,7 +340,7 @@ void loadc(stream *f, cube &c, const ivec &co, int size, bool &failed)
     {
         int surfmask, totalverts;
         surfmask = f->getchar();
-        totalverts = f->getchar();
+        totalverts = max(f->getchar(), 0);
         newcubeext(c, totalverts, false);
         memset(c.ext->surfaces, 0, sizeof(c.ext->surfaces));
         memset(c.ext->verts(), 0, totalverts*sizeof(vertinfo));
@@ -537,7 +562,8 @@ void loadvslot(stream *f, VSlot &vs, int changed)
 
 void loadvslots(stream *f, int numvslots)
 {
-    int *prev = new int[numvslots];
+    int *prev = new (false) int[numvslots];
+    if(!prev) return;
     memset(prev, -1, numvslots*sizeof(int));
     while(numvslots > 0)
     {
@@ -693,9 +719,9 @@ bool load_world(const char *mname, const char *cname)        // still supports a
     freeocta(worldroot);
     worldroot = NULL;
 
-    setvar("mapsize", hdr.worldsize, true, false);
     int worldscale = 0;
     while(1<<worldscale < hdr.worldsize) worldscale++;
+    setvar("mapsize", 1<<worldscale, true, false);
     setvar("mapscale", worldscale, true, false);
 
     renderprogress(0, "loading vars...");
@@ -869,7 +895,6 @@ bool load_world(const char *mname, const char *cname)        // still supports a
 
     entitiesinoctanodes();
     attachentities();
-    initlights();
     allchanged(true);
 
     renderbackground("loading...", mapshot, mname, game::getmapinfo());
@@ -896,7 +921,6 @@ void writeobj(char *name)
     defformatstring(mtlname, "%s.mtl", name);
     path(mtlname);
     f->printf("mtllib %s\n\n", mtlname);
-    extern vector<vtxarray *> valist;
     vector<vec> verts, texcoords;
     hashtable<vec, int> shareverts(1<<16), sharetc(1<<16);
     hashtable<int, vector<ivec2> > mtls(1<<8);
@@ -1037,7 +1061,6 @@ void writecollideobj(char *name)
     xform.invert();
 
     ivec selmin = sel.o, selmax = ivec(sel.s).mul(sel.grid).add(sel.o);
-    extern vector<vtxarray *> valist;
     vector<vec> verts;
     hashtable<vec, int> shareverts;
     vector<int> tris;

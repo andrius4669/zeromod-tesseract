@@ -358,6 +358,7 @@ struct skelmodel : animmodel
 
         void render(const animstate *as, skin &s, vbocacheentry &vc)
         {
+            if(!Shader::lastshader) return;
             glDrawRangeElements_(GL_TRIANGLES, minvert, maxvert, elen, GL_UNSIGNED_SHORT, &((skelmeshgroup *)group)->edata[eoffset]);
             glde++;
             xtravertsva += numverts;
@@ -1186,7 +1187,7 @@ struct skelmodel : animmodel
                     loopv(blendcombos) blendcombos[i].interpindex = -1;
                 }
 
-                glBindBuffer_(GL_ARRAY_BUFFER, vc.vbuf);
+                gle::bindvbo(vc.vbuf);
                 #define GENVBO(type, args) \
                     do \
                     { \
@@ -1212,13 +1213,13 @@ struct skelmodel : animmodel
                 #undef GENVBO
                 #undef GENVBOANIM
                 #undef GENVBOSTAT
-                glBindBuffer_(GL_ARRAY_BUFFER, 0);
+                gle::clearvbo();
             }
 
             glGenBuffers_(1, &ebuf);
-            glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, ebuf);
+            gle::bindebo(ebuf);
             glBufferData_(GL_ELEMENT_ARRAY_BUFFER, idxs.length()*sizeof(ushort), idxs.getbuf(), GL_STATIC_DRAW);
-            glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, 0);
+            gle::clearebo();
         }
 
         template<class T>
@@ -1451,7 +1452,7 @@ struct skelmodel : animmodel
                     {
                         m.interpverts(sc.bdata, bc ? bc->bdata : NULL, (vvert *)vdata, p->skins[i]);
                     });
-                    glBindBuffer_(GL_ARRAY_BUFFER, vc.vbuf);
+                    gle::bindvbo(vc.vbuf);
                     glBufferData_(GL_ARRAY_BUFFER, vlen*vertsize, vdata, GL_STREAM_DRAW);
                 }
 
@@ -1514,7 +1515,6 @@ struct skelmodel : animmodel
 
         skelpart(animmodel *model, int index = 0) : part(model, index), buildingpartmask(NULL), partmask(NULL)
         {
-            disablepitch();
         }
 
         virtual ~skelpart()
@@ -1593,6 +1593,7 @@ struct skelmodel : animmodel
 
     skelpart &addpart()
     {
+        flushpart();
         skelpart *p = new skelpart(this, parts.length());
         parts.add(p);
         return *p;
@@ -1617,19 +1618,22 @@ struct skeladjustment
     }
 };
 
-template<class MDL> struct skelloader : modelloader<MDL>
+template<class MDL> struct skelloader : modelloader<MDL, skelmodel>
 {
     static vector<skeladjustment> adjustments;
     static vector<uchar> hitzones;
 
+    skelloader(const char *name) : modelloader<MDL, skelmodel>(name) {}
+
     void flushpart()
     {
-        if(MDL::loading && MDL::loading->parts.length())
+        if(hitzones.length() && skelmodel::parts.length())
         {
-            skelmodel::skelpart *p = (skelmodel::skelpart *)MDL::loading->parts.last();
+            skelmodel::skelpart *p = (skelmodel::skelpart *)skelmodel::parts.last();
             skelmodel::skelmeshgroup *m = (skelmodel::skelmeshgroup *)p->meshes;
-            if(hitzones.length() && m) m->buildhitdata(hitzones.getbuf());
+            if(m) m->buildhitdata(hitzones.getbuf());
         }
+
         adjustments.setsize(0);
         hitzones.setsize(0);
     }
@@ -1656,11 +1660,11 @@ template<class MDL> struct skelcommands : modelcommands<MDL, struct MDL::skelmes
         if(!MDL::loading) { conoutf("not loading an %s", MDL::formatname()); return; }
         defformatstring(filename, "%s/%s", MDL::dir, meshfile);
         part &mdl = MDL::loading->addpart();
-        MDL::adjustments.setsize(0);
         mdl.meshes = MDL::loading->sharemeshes(path(filename), skelname[0] ? skelname : NULL, *smooth > 0 ? cosf(clamp(*smooth, 0.0f, 180.0f)*RAD) : 2);
         if(!mdl.meshes) conoutf("could not load %s", filename);
         else
         {
+            if(mdl.meshes && ((meshgroup *)mdl.meshes)->skel->numbones > 0) mdl.disablepitch();  
             mdl.initanimparts();
             mdl.initskins();
         }
@@ -1777,7 +1781,7 @@ template<class MDL> struct skelcommands : modelcommands<MDL, struct MDL::skelmes
         c.pitchmax = *pitchmax;
         c.pitchscale = *scale;
         int pos = skel->pitchcorrects.length();
-        loopv(skel->pitchcorrects) if(bone <= skel->pitchcorrects[i].bone) { pos = i; break; break; }
+        loopv(skel->pitchcorrects) if(bone <= skel->pitchcorrects[i].bone) { pos = i; break; }
         skel->pitchcorrects.insert(pos, c);
     }
 

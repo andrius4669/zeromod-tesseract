@@ -113,10 +113,10 @@ struct animmodel : model
         part *owner;
         Texture *tex, *decal, *masks, *envmap, *normalmap;
         Shader *shader, *rsmshader;
-        bool cullface;
+        int cullface;
         shaderparamskey *key;
 
-        skin() : owner(0), tex(notexture), decal(NULL), masks(notexture), envmap(NULL), normalmap(NULL), shader(NULL), rsmshader(NULL), cullface(true), key(NULL) {}
+        skin() : owner(0), tex(notexture), decal(NULL), masks(notexture), envmap(NULL), normalmap(NULL), shader(NULL), rsmshader(NULL), cullface(1), key(NULL) {}
 
         bool masked() const { return masks != notexture; }
         bool envmapped() const { return envmapmax>0; }
@@ -131,6 +131,7 @@ struct animmodel : model
 
         void setshaderparams(mesh &m, const animstate *as, bool skinned = true)
         {
+            if(!Shader::lastshader) return;
             if(key->checkversion() && Shader::lastshader->owner == key) return;
             Shader::lastshader->owner = key;
 
@@ -218,13 +219,16 @@ struct animmodel : model
 
         void setshader(mesh &m, const animstate *as)
         {
-            m.setshader(loadshader(), !shadowmapping && colorscale.a < 1 ? 1 : 0);
+            m.setshader(loadshader(), transparentlayer ? 1 : 0);
         }
 
         void bind(mesh &b, const animstate *as)
         {
-            if(!cullface && enablecullface) { glDisable(GL_CULL_FACE); enablecullface = false; }
-            else if(cullface && !enablecullface) { glEnable(GL_CULL_FACE); enablecullface = true; }
+            if(cullface > 0)
+            {
+                if(!enablecullface) { glEnable(GL_CULL_FACE); enablecullface = true; }
+            }
+            else if(enablecullface) { glDisable(GL_CULL_FACE); enablecullface = false; }
 
             if(as->cur.anim&ANIM_NOSKIN)
             {
@@ -317,7 +321,15 @@ struct animmodel : model
             if(cancollide) m.flags |= BIH::MESH_COLLIDE;
             if(s.alphatested()) m.flags |= BIH::MESH_ALPHA;
             if(noclip) m.flags |= BIH::MESH_NOCLIP;
+            if(s.cullface > 0) m.flags |= BIH::MESH_CULLFACE;
             genBIH(m);
+            while(bih.last().numtris > BIH::mesh::MAXTRIS)
+            {
+                BIH::mesh &overflow = bih.dup();
+                overflow.tris += BIH::mesh::MAXTRIS;
+                overflow.numtris -= BIH::mesh::MAXTRIS;
+                bih[bih.length()-2].numtris = BIH::mesh::MAXTRIS;
+            }
         }
 
         virtual void genshadowmesh(vector<triangle> &tris, const matrix4x3 &m) {}
@@ -546,12 +558,12 @@ struct animmodel : model
         {
             if(lastebuf!=ebuf)
             {
-                glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, ebuf);
+                gle::bindebo(ebuf);
                 lastebuf = ebuf;
             }
             if(lastvbuf!=vbuf)
             {
-                glBindBuffer_(GL_ARRAY_BUFFER, vbuf);
+                gle::bindvbo(vbuf);
                 if(!lastvbuf) gle::enablevertex();
                 gle::vertexpointer(stride, v, type, size);
                 lastvbuf = vbuf;
@@ -891,7 +903,7 @@ struct animmodel : model
                 matrixstack[matrixpos] = matrixstack[matrixpos-1];
                 matrixstack[matrixpos].rotate(pitchamount*RAD, oaxis);
             }
-            if(!index && !model->translate.iszero())
+            if(this == model->parts[0] && !model->translate.iszero())
             {
                 if(oldpos == matrixpos)
                 {
@@ -914,7 +926,7 @@ struct animmodel : model
                 {
                     linkedpart &link = links[i];
                     if(!link.p) continue;
-                    link.matrix.translate(links[i].translate, resize);
+                    link.matrix.translate(link.translate, resize);
 
                     matrixpos++;
                     matrixstack[matrixpos].mul(matrixstack[matrixpos-1], link.matrix);
@@ -977,7 +989,7 @@ struct animmodel : model
                 matrixstack[matrixpos] = matrixstack[matrixpos-1];
                 matrixstack[matrixpos].rotate(pitchamount*RAD, oaxis);
             }
-            if(!index && !model->translate.iszero())
+            if(this == model->parts[0] && !model->translate.iszero())
             {
                 if(oldpos == matrixpos)
                 {
@@ -1013,7 +1025,7 @@ struct animmodel : model
                 loopv(links)
                 {
                     linkedpart &link = links[i];
-                    link.matrix.translate(links[i].translate, resize);
+                    link.matrix.translate(link.translate, resize);
 
                     matrixpos++;
                     matrixstack[matrixpos].mul(matrixstack[matrixpos-1], link.matrix);
@@ -1358,8 +1370,11 @@ struct animmodel : model
         loopv(parts) parts[i]->cleanup();
     }
 
+    virtual void flushpart() {}
+
     part &addpart()
     {
+        flushpart();
         part *p = new part(this, parts.length());
         parts.add(p);
         return *p;
@@ -1464,8 +1479,26 @@ struct animmodel : model
         return false;
     }
 
-    virtual bool loaddefaultparts()
+    virtual bool flipy() const { return false; }
+    virtual bool loadconfig() { return false; }
+    virtual bool loaddefaultparts() { return false; }
+    virtual void startload() {}
+    virtual void endload() {}
+
+    bool load()
     {
+        startload();
+        bool success = loadconfig() && parts.length(); // configured model, will call the model commands below
+        if(!success)
+            success = loaddefaultparts(); // model without configuration, try default tris and skin
+        flushpart();
+        endload();
+        if(flipy()) translate.y = -translate.y;
+
+        if(!success) return false;
+        loopv(parts) if(!parts[i]->meshes) return false;
+
+        loaded();
         return true;
     }
 
@@ -1536,7 +1569,7 @@ struct animmodel : model
         loopv(parts) loopvj(parts[i]->skins) parts[i]->skins[j].fullbright = fullbright;
     }
 
-    void setcullface(bool cullface)
+    void setcullface(int cullface)
     {
         if(parts.empty()) loaddefaultparts();
         loopv(parts) loopvj(parts[i]->skins) parts[i]->skins[j].cullface = cullface;
@@ -1622,9 +1655,12 @@ struct animmodel : model
 
     static void disablevbo()
     {
-        glBindBuffer_(GL_ARRAY_BUFFER, 0);
-        glBindBuffer_(GL_ELEMENT_ARRAY_BUFFER, 0);
-        gle::disablevertex();
+        if(lastebuf) gle::clearebo();
+        if(lastvbuf)
+        {
+            gle::clearvbo();
+            gle::disablevertex();
+        }
         if(enabletc) disabletc();
         if(enabletangents) disabletangents();
         if(enablebones) disablebones();
@@ -1665,18 +1701,41 @@ static inline bool htcmp(const animmodel::shaderparams &x, const animmodel::shad
 hashtable<animmodel::shaderparams, animmodel::shaderparamskey> animmodel::shaderparamskey::keys;
 int animmodel::shaderparamskey::firstversion = 0, animmodel::shaderparamskey::lastversion = 1;
 
-template<class MDL> struct modelloader
+template<class MDL, class BASE> struct modelloader : BASE
 {
     static MDL *loading;
     static string dir;
 
+    modelloader(const char *name) : BASE(name) {}
+
     static bool cananimate() { return true; }
     static bool multiparted() { return true; }
     static bool multimeshed() { return true; }
+
+    void startload()
+    {
+        loading = (MDL *)this;
+    }
+
+    void endload()
+    {
+        loading = NULL;
+    }
+
+    bool loadconfig()
+    {
+        formatstring(dir, "media/model/%s", BASE::name);
+        defformatstring(cfgname, "media/model/%s/%s.cfg", BASE::name, MDL::formatname());
+
+        identflags &= ~IDF_PERSIST;
+        bool success = execfile(cfgname, false);
+        identflags |= IDF_PERSIST;
+        return success;
+    }
 };
 
-template<class MDL> MDL *modelloader<MDL>::loading = NULL;
-template<class MDL> string modelloader<MDL>::dir = {'\0'}; // crashes clang if "" is used here
+template<class MDL, class BASE> MDL *modelloader<MDL, BASE>::loading = NULL;
+template<class MDL, class BASE> string modelloader<MDL, BASE>::dir = {'\0'}; // crashes clang if "" is used here
 
 template<class MDL, class MESH> struct modelcommands
 {
@@ -1743,7 +1802,7 @@ template<class MDL, class MESH> struct modelcommands
 
     static void setcullface(char *meshname, int *cullface)
     {
-        loopskins(meshname, s, s.cullface = *cullface!=0);
+        loopskins(meshname, s, s.cullface = *cullface);
     }
 
     static void setcolor(char *meshname, float *r, float *g, float *b)

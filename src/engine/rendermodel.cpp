@@ -45,7 +45,7 @@ MODELTYPE(MDL_IQM, iqm);
 void mdlcullface(int *cullface)
 {
     checkmdl;
-    loadingmodel->setcullface(*cullface!=0);
+    loadingmodel->setcullface(*cullface);
 }
 COMMAND(mdlcullface, "i");
 
@@ -471,7 +471,7 @@ COMMAND(clearmodel, "s");
 
 bool modeloccluded(const vec &center, float radius)
 {
-    ivec bbmin = vec(center).sub(radius), bbmax = vec(center).add(radius+1);
+    ivec bbmin(vec(center).sub(radius)), bbmax(vec(center).add(radius+1));
     return pvsoccluded(bbmin, bbmax) || bboccluded(bbmin, bbmax);
 }
 
@@ -613,8 +613,8 @@ void shadowmaskbatchedmodels(bool dynshadow)
     loopv(batchedmodels)
     {
         batchedmodel &b = batchedmodels[i];
-        if(b.flags&MDL_MAPMODEL) break;
-        b.visible = dynshadow && b.colorscale.a >= 1 ? shadowmaskmodel(b.center, b.radius) : 0;
+        if(b.flags&(MDL_MAPMODEL | MDL_NOSHADOW)) break;
+        b.visible = dynshadow && (b.colorscale.a >= 1 || b.flags&(MDL_ONLYSHADOW | MDL_FORCESHADOW)) ? shadowmaskmodel(b.center, b.radius) : 0;
     }
 }
 
@@ -734,10 +734,11 @@ void rendermodelbatches()
             j = bm.next;
             bm.culled = cullmodel(b.m, bm.center, bm.radius, bm.flags, bm.d);
             if(bm.culled || bm.flags&MDL_ONLYSHADOW) continue;
-            if(bm.colorscale.a < 1)
+            if(bm.colorscale.a < 1 || bm.flags&MDL_FORCETRANSPARENT)
             {
                 float sx1, sy1, sx2, sy2;
-                if(calcbbscissor(vec(bm.center).sub(bm.radius), vec(bm.center).add(bm.radius+1), sx1, sy1, sx2, sy2))
+                ivec bbmin(vec(bm.center).sub(bm.radius)), bbmax(vec(bm.center).add(bm.radius+1));
+                if(calcbbscissor(bbmin, bbmax, sx1, sy1, sx2, sy2))
                 {
                     transmdlsx1 = min(transmdlsx1, sx1);
                     transmdlsy1 = min(transmdlsy1, sy1);
@@ -753,7 +754,7 @@ void rendermodelbatches()
                 rendered = true;
                 setaamask(true);
             }
-            if(bm.flags&MDL_CULL_QUERY && !viewidx)
+            if(bm.flags&MDL_CULL_QUERY)
             {
                 bm.d->query = newquery(bm.d);
                 if(bm.d->query)
@@ -767,7 +768,7 @@ void rendermodelbatches()
             renderbatchedmodel(b.m, bm);
         }
         if(rendered) b.m->endrender();
-        if(b.flags&MDL_CULL_QUERY && !viewidx)
+        if(b.flags&MDL_CULL_QUERY)
         {
             bool queried = false;
             for(int j = b.batched; j >= 0;)
@@ -804,7 +805,7 @@ void rendertransparentmodelbatches(int stencil)
             batchedmodel &bm = batchedmodels[j];
             j = bm.next;
             bm.culled = cullmodel(b.m, bm.center, bm.radius, bm.flags, bm.d);
-            if(bm.culled || bm.colorscale.a >= 1 || bm.flags&MDL_ONLYSHADOW) continue;
+            if(bm.culled || !(bm.colorscale.a < 1 || bm.flags&MDL_FORCETRANSPARENT) || bm.flags&MDL_ONLYSHADOW) continue;
             if(!rendered)
             {
                 b.m->startrender();
@@ -982,7 +983,7 @@ hasboundbox:
         int culled = cullmodel(m, center, radius, flags, d);
         if(culled)
         {
-            if(culled&(MDL_CULL_OCCLUDED|MDL_CULL_QUERY) && flags&MDL_CULL_QUERY && !viewidx)
+            if(culled&(MDL_CULL_OCCLUDED|MDL_CULL_QUERY) && flags&MDL_CULL_QUERY)
             {
                 enablecullmodelquery();
                 rendercullmodelquery(m, d, center, radius);
@@ -991,7 +992,7 @@ hasboundbox:
             return;
         }
         enableaamask();
-        if(flags&MDL_CULL_QUERY && !viewidx)
+        if(flags&MDL_CULL_QUERY)
         {
             d->query = newquery(d);
             if(d->query) startquery(d->query);
@@ -1001,7 +1002,7 @@ hasboundbox:
         if(flags&MDL_FULLBRIGHT) anim |= ANIM_FULLBRIGHT;
         m->render(anim, basetime, basetime2, o, yaw, pitch, roll, d, a, size, color);
         m->endrender();
-        if(flags&MDL_CULL_QUERY && !viewidx && d->query) endquery(d->query);
+        if(flags&MDL_CULL_QUERY && d->query) endquery(d->query);
         disableaamask();
         return;
     }

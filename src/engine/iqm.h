@@ -94,9 +94,9 @@ struct iqmvertexarray
     uint offset;
 };
 
-struct iqm : skelmodel, skelloader<iqm>
+struct iqm : skelloader<iqm>
 {
-    iqm(const char *name) : skelmodel(name) {}
+    iqm(const char *name) : skelloader(name) {}
 
     static const char *formatname() { return "iqm"; }
     int type() const { return MDL_IQM; }
@@ -331,8 +331,8 @@ struct iqm : skelmodel, skelloader<iqm>
             lilswap(&hdr.version, (sizeof(hdr) - sizeof(hdr.magic))/sizeof(uint));
             if(hdr.version != 2) goto error;
             if(hdr.filesize > (16<<20)) goto error; // sanity check... don't load files bigger than 16 MB
-            buf = new uchar[hdr.filesize];
-            if(f->read(buf + sizeof(hdr), hdr.filesize - sizeof(hdr)) != hdr.filesize - sizeof(hdr)) goto error;
+            buf = new (false) uchar[hdr.filesize];
+            if(!buf || f->read(buf + sizeof(hdr), hdr.filesize - sizeof(hdr)) != hdr.filesize - sizeof(hdr)) goto error;
 
             if(doloadmesh && !loadiqmmeshes(filename, hdr, buf)) goto error;
             if(doloadanim && !loadiqmanims(filename, hdr, buf)) goto error;
@@ -375,7 +375,6 @@ struct iqm : skelmodel, skelloader<iqm>
     bool loaddefaultparts()
     {
         skelpart &mdl = addpart();
-        adjustments.setsize(0);
         const char *fname = name + strlen(name);
         do --fname; while(fname >= name && *fname!='/' && *fname!='\\');
         fname++;
@@ -384,33 +383,6 @@ struct iqm : skelmodel, skelloader<iqm>
         if(!mdl.meshes) return false;
         mdl.initanimparts();
         mdl.initskins();
-        return true;
-    }
-
-    bool load()
-    {
-        formatstring(dir, "media/model/%s", name);
-        defformatstring(cfgname, "media/model/%s/iqm.cfg", name);
-
-        loading = this;
-        identflags &= ~IDF_PERSIST;
-        if(execfile(cfgname, false) && parts.length()) // configured iqm, will call the iqm* commands below
-        {
-            identflags |= IDF_PERSIST;
-            loading = NULL;
-            loopv(parts) if(!parts[i]->meshes) return false;
-        }
-        else // iqm without configuration, try default tris and skin
-        {
-            identflags |= IDF_PERSIST;
-            if(!loaddefaultparts())
-            {
-                loading = NULL;
-                return false;
-            }
-            loading = NULL;
-        }
-        loaded();
         return true;
     }
 };
