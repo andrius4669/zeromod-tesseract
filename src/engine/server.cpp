@@ -1226,7 +1226,6 @@ void startlistenserver(int *usemaster)
     }
     else mss[0].allowupdatemaster = allowupdatemaster;
 
-
     if(!setuplistenserver(false)) return;
 
     updatemasterserver();
