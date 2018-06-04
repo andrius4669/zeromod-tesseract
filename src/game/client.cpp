@@ -1162,7 +1162,7 @@ namespace game
                 float yaw, pitch, roll;
                 loopk(3)
                 {
-                    int n = p.get(); n |= p.get()<<8; if(flags&(1<<k)) { n |= p.get()<<16; if(n&0x800000) n |= -1<<24; }
+                    int n = p.get(); n |= p.get()<<8; if(flags&(1<<k)) { n |= p.get()<<16; if(n&0x800000) n |= ~0U<<24; }
                     o[k] = n/DMF;
                 }
                 int dir = p.get(); dir |= p.get()<<8;
@@ -1196,14 +1196,11 @@ namespace game
                 d->strafe = (physstate>>6)&2 ? -1 : (physstate>>6)&1;
                 d->crouching = (flags&(1<<8))!=0 ? -1 : abs(d->crouching);
                 vec oldpos(d->o);
-                if(allowmove(d))
-                {
-                    d->o = o;
-                    d->o.z += d->eyeheight;
-                    d->vel = vel;
-                    d->falling = falling;
-                    d->physstate = physstate&7;
-                }
+                d->o = o;
+                d->o.z += d->eyeheight;
+                d->vel = vel;
+                d->falling = falling;
+                d->physstate = physstate&7;
                 updatephysstate(d);
                 updatepos(d);
                 if(smoothmove && d->smoothmillis>=0 && oldpos.dist(d->o) < smoothdist)
@@ -1457,6 +1454,12 @@ namespace game
                     if(!text[0]) copystring(text, "unnamed");
                     if(strcmp(text, d->name))
                     {
+                        if(d == player1 && antirename)
+                        {
+                            conoutf("server tried to rename to %s, rejecting", colorname(d, text));
+                            addmsg(N_SWITCHNAME, "rs", player1->name);
+                            break;
+                        }
                         if(!isignored(d->clientnum)) conoutf("%s is now known as %s", colorname(d), colorname(d, text));
                         copystring(d->name, text, MAXNAMELEN+1);
                     }

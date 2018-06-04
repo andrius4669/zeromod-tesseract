@@ -26,7 +26,7 @@ namespace game
         if(gun!=d->gunselect)
         {
             addmsg(N_GUNSELECT, "rci", d, gun);
-            playsound(S_WEAPLOAD, &d->o);
+            playsound(S_WEAPLOAD, d == player1 ? NULL : &d->o);
         }
         d->gunselect = gun;
     }
@@ -122,8 +122,11 @@ namespace game
         offset.mul((to.dist(from)/1024)*spread);
         offset.z /= 2;
         dest = vec(offset).add(to);
-        vec dir = vec(dest).sub(from).normalize();
-        raycubepos(from, dir, dest, range, RAY_CLIPMAT|RAY_ALPHAPOLY);
+        if(dest != from)
+        {
+            vec dir = vec(dest).sub(from).normalize();
+            raycubepos(from, dir, dest, range, RAY_CLIPMAT|RAY_ALPHAPOLY);
+        }
     }
 
     void createrays(int atk, const vec &from, const vec &to)             // create random spread of rays
@@ -172,7 +175,7 @@ namespace game
         }
 
         vec dir(to);
-        dir.sub(from).normalize();
+        dir.sub(from).safenormalize();
         bnc.vel = dir;
         bnc.vel.mul(speed);
 
@@ -244,7 +247,7 @@ namespace game
     void newprojectile(const vec &from, const vec &to, float speed, bool local, int id, gameent *owner, int atk)
     {
         projectile &p = projs.add();
-        p.dir = vec(to).sub(from).normalize();
+        p.dir = vec(to).sub(from).safenormalize();
         p.o = from;
         p.from = from;
         p.to = to;
@@ -336,14 +339,14 @@ namespace game
 
     void hitpush(int damage, dynent *d, gameent *at, vec &from, vec &to, int atk, int rays)
     {
-        hit(damage, d, at, vec(to).sub(from).normalize(), atk, from.dist(to), rays);
+        hit(damage, d, at, vec(to).sub(from).safenormalize(), atk, from.dist(to), rays);
     }
 
     float projdist(dynent *o, vec &dir, const vec &v, const vec &vel)
     {
         vec middle = o->o;
         middle.z += (o->aboveeye-o->eyeheight)/2;
-        dir = vec(middle).sub(v).add(vec(vel).mul(5)).normalize();
+        dir = vec(middle).sub(v).add(vec(vel).mul(5)).safenormalize();
 
         float low = min(o->o.z - o->eyeheight + o->radius, middle.z),
               high = max(o->o.z + o->aboveeye - o->radius, middle.z);
@@ -502,7 +505,7 @@ namespace game
 
     void railhit(const vec &from, const vec &to, bool stain = true)
     {
-        vec dir = vec(from).sub(to).normalize();
+        vec dir = vec(from).sub(to).safenormalize();
         if(stain)
         {
             addstain(STAIN_RAIL_HOLE, to, dir, 2.0f);
@@ -659,7 +662,7 @@ namespace game
         }
         d->ammo[gun] -= attacks[atk].use;
 
-        vec from = d->o, to = targ, dir = vec(to).sub(from).normalize();
+        vec from = d->o, to = targ, dir = vec(to).sub(from).safenormalize();
         float dist = to.dist(from);
         if(!(d->physstate >= PHYS_SLOPE && d->crouching && d->crouched()))
         {
