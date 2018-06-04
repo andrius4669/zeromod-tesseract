@@ -227,23 +227,26 @@ namespace game
         ai::update();
         moveragdolls();
         gets2c();
-        if(player1->state == CS_DEAD)
+        if(connected)
         {
-            if(player1->ragdoll) moveragdoll(player1);
-            else if(lastmillis-player1->lastpain<2000)
+            if(player1->state == CS_DEAD)
             {
-                player1->move = player1->strafe = 0;
-                moveplayer(player1, 10, true);
+                if(player1->ragdoll) moveragdoll(player1);
+                else if(lastmillis-player1->lastpain<2000)
+                {
+                    player1->move = player1->strafe = 0;
+                    moveplayer(player1, 10, true);
+                }
             }
-        }
-        else if(!intermission)
-        {
-            if(player1->ragdoll) cleanragdoll(player1);
-            crouchplayer(player1, 10, true);
-            moveplayer(player1, 10, true);
-            swayhudgun(curtime);
-            entities::checkitems(player1);
-            if(cmode) cmode->checkitems(player1);
+            else if(!intermission)
+            {
+                if(player1->ragdoll) cleanragdoll(player1);
+                crouchplayer(player1, 10, true);
+                moveplayer(player1, 10, true);
+                swayhudgun(curtime);
+                entities::checkitems(player1);
+                if(cmode) cmode->checkitems(player1);
+            }
         }
         if(player1->clientnum>=0) c2sinfo();   // do this last, to reduce the effective frame lag
     }
@@ -285,7 +288,7 @@ namespace game
 
     void doaction(int act)
     {
-        if(intermission) return;
+        if(!connected || intermission) return;
         if((player1->attacking = act)) respawn();
     }
 
@@ -294,13 +297,15 @@ namespace game
 
     bool canjump()
     {
-        if(!intermission) respawn();
-        return player1->state!=CS_DEAD && !intermission;
+        if(!connected || intermission) return false;
+        respawn();
+        return player1->state!=CS_DEAD;
     }
 
     bool cancrouch()
     {
-        return player1->state!=CS_DEAD && !intermission;
+        if(!connected || intermission) return false;
+        return player1->state!=CS_DEAD;
     }
 
     bool allowmove(physent *d)
@@ -623,10 +628,10 @@ namespace game
         return false;
     }
 
-    const char *colorname(gameent *d, const char *name, const char * alt, const char *color)
+    const char *colorname(gameent *d, const char *name, const char * alt, const char *color, int verbose)
     {
         if(!name) name = alt && d == player1 ? alt : d->name;
-        bool dup = !name[0] || duplicatename(d, name, alt) || d->aitype != AI_NONE;
+        bool dup = verbose || !name[0] || duplicatename(d, name, alt) || d->aitype != AI_NONE;
         if(dup || color[0])
         {
             if(dup) return tempformatstring(d->aitype == AI_NONE ? "\fs%s%s \f5(%d)\fr" : "\fs%s%s \f5[%d]\fr", color, name, d->clientnum);
@@ -696,9 +701,7 @@ namespace game
     void drawhudicons(gameent *d)
     {
 #if 0
-        pushhudmatrix();
-        hudmatrix.scale(2, 2, 1);
-        flushhudmatrix();
+        pushhudscale(2);
 
         draw_textf("%d", (HICON_X + HICON_SIZE + HICON_SPACE)/2, HICON_TEXTY/2, d->state==CS_DEAD ? 0 : d->health);
         if(d->state!=CS_DEAD)
@@ -719,9 +722,7 @@ namespace game
 
     void gameplayhud(int w, int h)
     {
-        pushhudmatrix();
-        hudmatrix.scale(h/1800.0f, h/1800.0f, 1);
-        flushhudmatrix();
+        pushhudscale(h/1800.0f);
 
         if(player1->state==CS_SPECTATOR)
         {
