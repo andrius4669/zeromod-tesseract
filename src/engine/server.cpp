@@ -5,6 +5,8 @@
 
 volatile bool reloadcfg = false, quitserver = false;
 
+bool quitwhenempty = false;
+
 #define LOGSTRLEN 512
 
 static FILE *logfile = NULL;
@@ -32,8 +34,8 @@ void setlogfile(const char *fname)
     closelogfile();
     if(fname && fname[0])
     {
-        fname = findfile(fname, "w");
-        if(fname) logfile = fopen(fname, "w");
+        fname = findfile(fname, "a");
+        if(fname) logfile = fopen(fname, "a");
     }
     FILE *f = getlogfile();
     if(f) setvbuf(f, NULL, _IOLBF, BUFSIZ);
@@ -320,14 +322,17 @@ const char *disconnectreason(int reason)
         case DISC_TIMEOUT: return "connection timed out";
         case DISC_OVERFLOW: return "overflow";
         case DISC_PASSWORD: return "invalid password";
+        case DISC_ENET_TIMEOUT: return "connection expired";
+        case DISC_ENET_ERROR: return "connection error";
         default: return NULL;
     }
 }
 
-void disconnect_client(int n, int reason)
+void disconnect_client(int n, int reason, bool wait)
 {
     if(!clients.inrange(n) || clients[n]->type!=ST_TCPIP) return;
-    enet_peer_disconnect(clients[n]->peer, reason);
+    if(!wait) enet_peer_disconnect(clients[n]->peer, reason);
+    else enet_peer_disconnect_later(clients[n]->peer, reason);
     server::clientdisconnect(n, true, reason);
     delclient(clients[n]);
 }
@@ -533,6 +538,8 @@ void sendserverinforeply(ucharbuf &p)
 
 #define MAXPINGDATA 32
 
+VAR(serveracceptstdin, 0, 0, 1);
+
 void checkserversockets()        // reply all server info requests
 {
     static ENetSocketSet readset, writeset;
@@ -541,8 +548,8 @@ void checkserversockets()        // reply all server info requests
     ENetSocket maxsock = ENET_SOCKET_NULL;
     loopv(mss) if(mss[i].mastersock != ENET_SOCKET_NULL)
     {
-        ENetSocket &mastersock = mss[i].mastersock;
-        int &masterconnected = mss[i].masterconnected;
+        ENetSocket mastersock = mss[i].mastersock;
+        int masterconnected = mss[i].masterconnected;
         maxsock = maxsock == ENET_SOCKET_NULL ? mastersock : max(maxsock, mastersock);
         ENET_SOCKETSET_ADD(readset, mastersock);
         if(!masterconnected) ENET_SOCKETSET_ADD(writeset, mastersock);
@@ -552,7 +559,32 @@ void checkserversockets()        // reply all server info requests
         maxsock = maxsock == ENET_SOCKET_NULL ? lansock : max(maxsock, lansock);
         ENET_SOCKETSET_ADD(readset, lansock);
     }
+#ifndef WIN32
+    if(serveracceptstdin)
+    {
+        ENET_SOCKETSET_ADD(readset, STDIN_FILENO);
+        maxsock = maxsock == ENET_SOCKET_NULL ? STDIN_FILENO : max(maxsock, STDIN_FILENO);
+    }
+#endif
     if(maxsock == ENET_SOCKET_NULL || enet_socketset_select(maxsock, &readset, &writeset, 0) <= 0) return;
+
+#ifndef WIN32
+    if(serveracceptstdin && ENET_SOCKETSET_CHECK(readset, STDIN_FILENO))
+    {
+        char buf[MAXTRANS*2];
+        if(fgets(buf, sizeof(buf), stdin))
+        {
+            size_t len = decodeutf8((uchar *)buf, sizeof(buf)-1, (uchar *)buf, strlen(buf));
+            buf[len] = '\0';
+            const char *ret = executestr(buf);
+            if(ret)
+            {
+                logoutf("result: %s", ret);
+                delete[] ret;
+            }
+        }
+    }
+#endif
 
     if(lansock != ENET_SOCKET_NULL && ENET_SOCKETSET_CHECK(readset, lansock))
     {
@@ -561,12 +593,13 @@ void checkserversockets()        // reply all server info requests
         buf.data = data;
         buf.dataLength = sizeof(data);
         int len = enet_socket_receive(lansock, &serverinfoaddress, &buf, 1);
-        if(len < 2 || data[0] != 0xFF || data[1] != 0xFF || len-2 > MAXPINGDATA) return;
+        if(len < 2 || data[0] != 0xFF || data[1] != 0xFF || len-2 > MAXPINGDATA) goto checkmasters;
         ucharbuf req(data+2, len-2), p(data+2, sizeof(data)-2);
         p.len += len-2;
         server::serverinforeply(req, p);
     }
 
+checkmasters:
     loopv(mss) if(mss[i].mastersock != ENET_SOCKET_NULL)
     {
         ENetSocket &mastersock = mss[i].mastersock;
@@ -603,7 +636,7 @@ static int serverinfointercept(ENetHost *host, ENetEvent *event)
     return 1;
 }
 
-VAR(serveruprate, 0, 0, INT_MAX);
+VARF(serveruprate, 0, 0, INT_MAX, { if(serverhost) enet_host_bandwidth_limit(serverhost, 0, serveruprate); });
 SVAR(serverip, "");
 VARF(serverport, 0, server::serverport(), 0xFFFF, { if(!serverport) serverport = server::serverport(); });
 
@@ -705,7 +738,11 @@ void serverslice(bool dedicated, uint timeout)   // main server update, called f
             {
                 client *c = (client *)event.peer->data;
                 if(!c) break;
-                server::clientdisconnect(c->num);
+                int errnum = -(int)event.data;
+                if(errnum > 0 && errnum < DISC_NUM2 - DISC_NUM)
+                    server::clientdisconnect(c->num, true, errnum + DISC_NUM);
+                else
+                    server::clientdisconnect(c->num);
                 delclient(c);
                 break;
             }
@@ -1044,6 +1081,9 @@ void signalhandler(int signum)
         case SIGUSR1:
             reloadcfg = true;
             break;
+        case SIGUSR2:
+            quitwhenempty = true;
+            break;
     }
 }
 
@@ -1069,7 +1109,12 @@ void rundedicatedserver()
             DispatchMessage(&msg);
         }
         if(quitserver) { stopdedicatedserver(); exit(EXIT_SUCCESS); }
-        if(reloadcfg) { reloadcfg = false; logoutf("reloading server configuration"); execfile("config/server-init.cfg", false); }
+        if(reloadcfg)
+        {
+            reloadcfg = false;
+            logoutf("reloading server configuration");
+            execfile("config/server-init.cfg", false);
+        }
         serverslice(true, 5);
     }
 #else
@@ -1081,7 +1126,12 @@ void rundedicatedserver()
     for(;;)
     {
         if(quitserver) { stopdedicatedserver(); exit(EXIT_SUCCESS); }
-        if(reloadcfg) { reloadcfg = false; logoutf("reloading server configuration"); execfile("config/server-init.cfg", false); }
+        if(reloadcfg)
+        {
+            reloadcfg = false;
+            logoutf("reloading server configuration");
+            execfile("config/server-init.cfg", false);
+        }
         serverslice(true, 5);
     }
 #endif
@@ -1138,6 +1188,7 @@ void initserver(bool listen, bool dedicated)
     }
 
     if(mss.empty()) addms();
+    setvbuf(stdin, NULL, _IONBF, 0);
 
     execfile("config/server-init.cfg", false);
 
@@ -1164,14 +1215,17 @@ void startlistenserver(int *usemaster)
     allowupdatemaster = *usemaster>0 ? 1 : 0;
     if(mss.length() > 1)
     {
+        // ignore setting when there are multiple masterservers set up
         allowupdatemaster = 0;
         loopv(mss) if(mss[i].allowupdatemaster) { allowupdatemaster = 1; break; }
     }
     else if(mss.empty())
     {
+        // allowupdatemaster true is default
         if(allowupdatemaster) mss.add();
     }
     else mss[0].allowupdatemaster = allowupdatemaster;
+
 
     if(!setuplistenserver(false)) return;
 
