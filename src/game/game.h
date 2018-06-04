@@ -141,6 +141,10 @@ static struct gamemodeinfo
 #define m_botmode      (m_checknot(gamemode, M_DEMO|M_LOCAL))
 #define m_mp(mode)     (m_checknot(mode, M_LOCAL))
 
+// zeromod
+#define m_recordable   (m_mp(gamemode) && (!m_edit || isracemode())) // expect isracemode() to be available in scope this going to be used in
+#define m_wantents     (!m_edit || z_racemode) // expect z_racemode to be visible. can't use isracemode() because check happens before smode assignment
+
 enum { MM_AUTH = -1, MM_OPEN = 0, MM_VETO, MM_LOCKED, MM_PRIVATE, MM_PASSWORD, MM_START = MM_AUTH, MM_INVALID = MM_START - 1 };
 
 static const char * const mastermodenames[] =  { "auth",   "open",   "veto",       "locked",     "private",    "password" };
@@ -511,7 +515,7 @@ namespace game
     extern bool clientoption(const char *arg);
     extern gameent *getclient(int cn);
     extern gameent *newclient(int cn);
-    extern const char *colorname(gameent *d, const char *name = NULL, const char *alt = NULL, const char *color = "");
+    extern const char *colorname(gameent *d, const char *name = NULL, const char *alt = NULL, const char *color = "", int verbose = 0);
     extern const char *teamcolorname(gameent *d, const char *alt = "you");
     extern const char *teamcolor(const char *prefix, const char *suffix, int team, const char *alt);
     extern gameent *pointatplayer();
