@@ -415,6 +415,7 @@ engine/server.o: shared/ents.h shared/command.h shared/glexts.h
 engine/server.o: shared/glemu.h shared/iengine.h shared/igame.h
 engine/server.o: engine/world.h engine/octa.h engine/light.h engine/texture.h
 engine/server.o: engine/bih.h engine/model.h
+engine/server.o: game/z_ms_engineserver_override.h
 engine/serverbrowser.o: engine/engine.h shared/cube.h shared/tools.h
 engine/serverbrowser.o: shared/geom.h shared/ents.h shared/command.h
 engine/serverbrowser.o: shared/glexts.h shared/glemu.h shared/iengine.h
@@ -477,8 +478,23 @@ game/scoreboard.o: shared/ents.h shared/command.h shared/glexts.h
 game/scoreboard.o: shared/glemu.h shared/iengine.h shared/igame.h game/ai.h
 game/server.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/server.o: shared/ents.h shared/command.h shared/glexts.h shared/glemu.h
-game/server.o: shared/iengine.h shared/igame.h game/ai.h game/ctf.h
-game/server.o: game/extinfo.h game/aiman.h
+game/server.o: shared/iengine.h shared/igame.h game/ai.h game/z_tree.h
+game/server.o: game/z_tools.h game/z_geoipstate.h game/z_queue.h
+game/server.o: game/z_extrainfo.h game/z_format.h game/z_servercommands.h
+game/server.o: game/z_maprotation.h game/z_bans.h game/z_triggers.h
+game/server.o: game/ctf.h game/z_persistteams.h game/z_log.h game/z_invpriv.h
+game/server.o: game/z_setmaster_override.h game/z_servcmd.h game/z_sendmap.h
+game/server.o: game/z_autosendmap.h game/z_loadmap.h game/z_records.h
+game/server.o: game/z_racemode.h game/z_awards.h game/z_ghost.h
+game/server.o: game/z_nodamage.h game/z_announcekills.h
+game/server.o: game/z_protectteamscores.h game/z_checkpos.h
+game/server.o: game/z_gbans_override.h game/z_geoip.h game/z_geoipserver.h
+game/server.o: game/z_ms_gameserver_override.h game/z_rename.h game/z_mutes.h
+game/server.o: game/z_msgfilter.h game/z_patchmap.h game/z_maploaded.h
+game/server.o: game/z_antiflood.h game/extinfo.h game/aiman.h
+game/server.o: game/z_scripting.h game/z_genericservercommands.h
+game/server.o: game/z_mapsucks.h game/z_savemap.h game/z_slay.h game/z_spy.h
+game/server.o: game/z_talkbot.h game/z_serverdesc.h
 game/waypoint.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/waypoint.o: shared/ents.h shared/command.h shared/glexts.h
 game/waypoint.o: shared/glemu.h shared/iengine.h shared/igame.h game/ai.h
@@ -513,6 +529,7 @@ standalone/engine/command.o: shared/iengine.h shared/igame.h engine/world.h
 standalone/engine/server.o: engine/engine.h shared/cube.h shared/tools.h
 standalone/engine/server.o: shared/geom.h shared/ents.h shared/command.h
 standalone/engine/server.o: shared/iengine.h shared/igame.h engine/world.h
+standalone/engine/server.o: game/z_ms_engineserver_override.h
 standalone/engine/worldio.o: engine/engine.h shared/cube.h shared/tools.h
 standalone/engine/worldio.o: shared/geom.h shared/ents.h shared/command.h
 standalone/engine/worldio.o: shared/iengine.h shared/igame.h engine/world.h
@@ -522,7 +539,25 @@ standalone/game/entities.o: shared/iengine.h shared/igame.h game/ai.h
 standalone/game/server.o: game/game.h shared/cube.h shared/tools.h
 standalone/game/server.o: shared/geom.h shared/ents.h shared/command.h
 standalone/game/server.o: shared/iengine.h shared/igame.h game/ai.h
-standalone/game/server.o: game/ctf.h game/extinfo.h game/aiman.h
+standalone/game/server.o: game/z_tree.h game/z_tools.h game/z_geoipstate.h
+standalone/game/server.o: game/z_queue.h game/z_extrainfo.h game/z_format.h
+standalone/game/server.o: game/z_servercommands.h game/z_maprotation.h
+standalone/game/server.o: game/z_bans.h game/z_triggers.h game/ctf.h
+standalone/game/server.o: game/z_persistteams.h game/z_log.h game/z_invpriv.h
+standalone/game/server.o: game/z_setmaster_override.h game/z_servcmd.h
+standalone/game/server.o: game/z_sendmap.h game/z_autosendmap.h
+standalone/game/server.o: game/z_loadmap.h game/z_records.h game/z_racemode.h
+standalone/game/server.o: game/z_awards.h game/z_ghost.h game/z_nodamage.h
+standalone/game/server.o: game/z_announcekills.h game/z_protectteamscores.h
+standalone/game/server.o: game/z_checkpos.h game/z_gbans_override.h
+standalone/game/server.o: game/z_geoip.h game/z_geoipserver.h
+standalone/game/server.o: game/z_ms_gameserver_override.h game/z_rename.h
+standalone/game/server.o: game/z_mutes.h game/z_msgfilter.h game/z_patchmap.h
+standalone/game/server.o: game/z_maploaded.h game/z_antiflood.h
+standalone/game/server.o: game/extinfo.h game/aiman.h game/z_scripting.h
+standalone/game/server.o: game/z_genericservercommands.h game/z_mapsucks.h
+standalone/game/server.o: game/z_savemap.h game/z_slay.h game/z_spy.h
+standalone/game/server.o: game/z_talkbot.h game/z_serverdesc.h
 standalone/engine/master.o: shared/cube.h shared/tools.h shared/geom.h
 standalone/engine/master.o: shared/ents.h shared/command.h shared/iengine.h
 standalone/engine/master.o: shared/igame.h
