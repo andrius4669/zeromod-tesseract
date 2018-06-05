@@ -1279,6 +1279,8 @@ namespace game
 
     extern int deathscore;
 
+    VARP(antirename, 0, 0, 1);
+
     void parsemessages(int cn, gameent *d, ucharbuf &p)
     {
         static char text[MAXTRANS];
