@@ -1,23 +1,38 @@
-#ifndef Z_MUTES_H
-#define Z_MUTES_H 1
+#ifdef Z_MUTES_H
+#error "already z_mutes.h"
+#endif
+#define Z_MUTES_H
 
-#include "z_servcmd.h"
-#include "z_triggers.h"
-#include "z_rename.h"
+#ifndef Z_SERVCMD_H
+#error "want z_servcmd.h"
+#endif
+#ifndef Z_TRIGGERS_H
+#error "want z_triggers.h"
+#endif
+#ifndef Z_RENAME_H
+#error "want z_rename.h"
+#endif
 
-static inline bool z_iseditmuted(clientinfo *ci) { return ci->editmute || smode==&racemode; }
+
+// used literally only for sendmap check
+static inline bool z_iseditmuted(clientinfo *ci)
+{
+    return ci->xi.editmute
+        || (smode==&racemode && !racemode_allowedit)
+        || z_shouldblockgameplay(ci);
+}
 
 static void z_servcmd_mute(int argc, char **argv, int sender)
 {
     int val = -1, cn, mutetype = 0;
     clientinfo *ci = NULL, *actor = getinfo(sender);
     const char *minfo = NULL;
-    if(argc < 2) { sendf(sender, 1, "ris", N_SERVMSG, "please specify client"); return; }
+    if(argc < 2) { z_servcmd_pleasespecifyclient(sender); return; }
     if(argc > 2) val = clamp(atoi(argv[2]), 0, 1);
 
-    if(!z_parseclient_verify(argv[1], &cn, true, true))
+    if(!z_parseclient_verify(argv[1], cn, true, true))
     {
-        sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[1]));
+        z_servcmd_unknownclient(argv[1], sender);
         return;
     }
     if(cn >= 0) ci = getinfo(cn);
@@ -33,15 +48,19 @@ static void z_servcmd_mute(int argc, char **argv, int sender)
     {
         if(ci)
         {
-            ci->chatmute = val!=0;
-            sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you %s %s", val ? "muted" : "unmuted", colorname(ci)));
-            if(ci->state.aitype == AI_NONE) sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got %s", val ? "muted" : "unmuted"));
+            if(ci->xi.chatmute != (val ? 1 : 0))
+            {
+                ci->xi.chatmute = val ? 1 : 0;
+                sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you %s %s", val ? "muted" : "unmuted", colorname(ci)));
+                if(ci->state.aitype == AI_NONE) sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got %s", val ? "muted" : "unmuted"));
+            }
         }
         else loopv(clients) if(!clients[i]->spy)
         {
             ci = clients[i];
-            ci->chatmute = val!=0;
+            if(ci->xi.chatmute == (val ? 1 : 0)) continue;
             sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you %s %s", val ? "muted" : "unmuted", colorname(ci)));
+            ci->xi.chatmute = val ? 1 : 0;
             if(ci->state.aitype == AI_NONE) sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got %s", val ? "muted" : "unmuted"));
         }
     }
@@ -49,19 +68,19 @@ static void z_servcmd_mute(int argc, char **argv, int sender)
     {
         if(ci)
         {
-            if(ci->state.aitype == AI_NONE)
+            if(ci->state.aitype == AI_NONE && ci->xi.editmute != (val!=0))
             {
-                ci->editmute = val!=0;
                 sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you edit-%s %s", val ? "muted" : "unmuted", colorname(ci)));
+                ci->xi.editmute = val!=0;
                 sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got edit-%s", val ? "muted" : "unmuted"));
             }
         }
         else loopv(clients)
         {
             ci = clients[i];
-            if(ci->state.aitype != AI_NONE || ci->spy) continue;
-            ci->editmute = val!=0;
+            if(ci->state.aitype != AI_NONE || ci->spy || ci->xi.editmute == (val!=0)) continue;
             sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("you edit-%s %s", val ? "muted" : "unmuted", colorname(ci)));
+            ci->xi.editmute = val!=0;
             sendf(ci->clientnum, 1, "ris", N_SERVMSG, tempformatstring("you got edit-%s", val ? "muted" : "unmuted"));
         }
     }
@@ -71,7 +90,7 @@ static void z_servcmd_mute(int argc, char **argv, int sender)
         {
             if(ci->state.aitype == AI_NONE)
             {
-                ci->namemute = val!=0;
+                ci->xi.namemute = val!=0;
                 if(val && minfo)
                 {
                     string name;
@@ -90,7 +109,7 @@ static void z_servcmd_mute(int argc, char **argv, int sender)
         {
             ci = clients[i];
             if(ci->state.aitype != AI_NONE || ci->spy) continue;
-            ci->namemute = val!=0;
+            ci->xi.namemute = val!=0;
             if(val && minfo)
             {
                 string name;
@@ -106,16 +125,16 @@ static void z_servcmd_mute(int argc, char **argv, int sender)
         }
     }
 }
-SCOMMANDNA(mute, PRIV_AUTH, z_servcmd_mute, 2);
-SCOMMANDNA(unmute, PRIV_AUTH, z_servcmd_mute, 1);
-SCOMMANDNA(editmute, PRIV_MASTER, z_servcmd_mute, 2);
-SCOMMANDNA(editunmute, PRIV_MASTER, z_servcmd_mute, 1);
-SCOMMANDNAH(emute, PRIV_MASTER, z_servcmd_mute, 2);
-SCOMMANDNAH(eunmute, PRIV_MASTER, z_servcmd_mute, 1);
-SCOMMANDNA(namemute, PRIV_AUTH, z_servcmd_mute, 2);
-SCOMMANDNA(nameunmute, PRIV_AUTH, z_servcmd_mute, 1);
-SCOMMANDNAH(nmute, PRIV_AUTH, z_servcmd_mute, 2);
-SCOMMANDNAH(nunmute, PRIV_AUTH, z_servcmd_mute, 1);
+SCOMMANDA(mute, PRIV_AUTH, z_servcmd_mute, 2);
+SCOMMANDA(unmute, PRIV_AUTH, z_servcmd_mute, 1);
+SCOMMANDA(editmute, PRIV_MASTER, z_servcmd_mute, 2);
+SCOMMANDA(editunmute, PRIV_MASTER, z_servcmd_mute, 1);
+SCOMMANDAH(emute, PRIV_MASTER, z_servcmd_mute, 2);
+SCOMMANDAH(eunmute, PRIV_MASTER, z_servcmd_mute, 1);
+SCOMMANDA(namemute, PRIV_AUTH, z_servcmd_mute, 2);
+SCOMMANDA(nameunmute, PRIV_AUTH, z_servcmd_mute, 1);
+SCOMMANDAH(nmute, PRIV_AUTH, z_servcmd_mute, 2);
+SCOMMANDAH(nunmute, PRIV_AUTH, z_servcmd_mute, 1);
 
 bool z_autoeditmute = false;
 VARFN(autoeditmute, z_defaultautoeditmute, 0, 0, 1, { if(clients.empty()) z_autoeditmute = z_defaultautoeditmute!=0; });
@@ -137,6 +156,4 @@ void z_servcmd_autoeditmute(int argc, char **argv, int sender)
     }
     else sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("autosendmute is %s", z_autoeditmute ? "enabled" : "disabled"));
 }
-SCOMMANDNA(autoeditmute, PRIV_MASTER, z_servcmd_autoeditmute, 1);
-
-#endif // Z_MUTES_H
+SCOMMANDA(autoeditmute, PRIV_MASTER, z_servcmd_autoeditmute, 1);

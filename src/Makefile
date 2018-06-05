@@ -1,15 +1,11 @@
 CXXFLAGS= -O3 -fomit-frame-pointer -ffast-math
-override CXXFLAGS+= -std=gnu++11 -Wall -fsigned-char -fno-exceptions -fno-rtti
+override CXXFLAGS+= -Wall -fsigned-char -fno-exceptions -fno-rtti
 
 PLATFORM= $(shell uname -s)
 PLATFORM_ARCH= $(shell uname -m)
 PLATFORM_PREFIX= native
 
 INCLUDES= -Ishared -Iengine -Igame -Ienet/include
-
-ifneq (,$(findstring BSD,$(PLATFORM)))
-  override CXXFLAGS+= -I/usr/local/include -L/usr/local/lib
-endif
 
 STRIP=
 ifeq (,$(findstring -g,$(CXXFLAGS)))
@@ -56,14 +52,6 @@ CLIENT_LIBS= -Lenet -lenet -L/usr/X11R6/lib -lX11 `sdl2-config --libs` -lSDL2_im
 endif
 ifeq ($(PLATFORM),Linux)
 CLIENT_LIBS+= -lrt
-	ifneq (,$(OVR))
-		CLIENT_INCLUDES+= -ILibOVR/Include -DHAS_OVR=1
-		ifneq (,$(findstring 64,$(PLATFORM_ARCH)))
-			CLIENT_LIBS+= -LLibOVR/Lib/Linux/Release/x86_64 -lovr -ludev -lXinerama
-		else
-			CLIENT_LIBS+= -LLibOVR/Lib/Linux/Release/i386 -lovr -ludev -lXinerama
-		endif
-	endif
 else
 ifneq (,$(findstring GNU,$(PLATFORM))) 
 CLIENT_LIBS+= -lrt 
@@ -94,7 +82,6 @@ CLIENT_OBJS= \
 	engine/octa.o \
 	engine/octaedit.o \
 	engine/octarender.o \
-	engine/ovr.o \
 	engine/physics.o \
 	engine/pvs.o \
 	engine/rendergl.o \
@@ -126,19 +113,36 @@ CLIENT_OBJS= \
 
 CLIENT_PCH= shared/cube.h.gch engine/engine.h.gch game/game.h.gch
 
-SERVER_INCLUDES= -DSTANDALONE=1 -Istandalone/shared -Istandalone/engine -Istandalone/game $(INCLUDES)
+SERVER_INCLUDES= -DSTANDALONE -Istandalone/shared -Istandalone/engine -Istandalone/game $(INCLUDES)
 ifneq (,$(findstring MINGW,$(PLATFORM)))
 SERVER_INCLUDES+= -Iinclude
 SERVER_LIBS= -mwindows $(STD_LIBS) -L$(WINBIN) -L$(WINLIB) -lzlib1 -lenet -lws2_32 -lwinmm
 MASTER_LIBS= $(STD_LIBS) -L$(WINBIN) -L$(WINLIB) -lzlib1 -lenet -lws2_32 -lwinmm
 else
 SERVER_LIBS= -Lenet -lenet -lz
-MASTER_LIBS= $(SERVER_LIBS)
-ifeq ($(shell ./check_geoip.sh $(CXX) $(CXXFLAGS) $(SERVER_INCLUDES)),1)
-SERVER_INCLUDES+= -DUSE_GEOIP
+ifeq ($(PLATFORM),SUNOS)
+CLIENT_LIBS+= -lsocket -lnsl
+SERVER_LIBS+= -lsocket -lnsl
+endif
+BSDLIBS=
+ifneq (,$(findstring BSD,$(PLATFORM)))
+SERVER_INCLUDES+= -I/usr/local/include
+CLIENT_INCLUDES+= -I/usr/local/include
+BSDLIBS= -L/usr/local/lib
+endif
+SERVER_LIBS+= $(BSDLIBS)
+CLIENT_LIBS+= $(BSDLIBS)
+MASTER_LIBS:= $(SERVER_LIBS)
+GEOIP_USES:=$(shell ./check_geoip.sh $(CXX) $(CXXFLAGS) $(SERVER_INCLUDES) $(BSDLIBS))
+SERVER_INCLUDES+=$(GEOIP_USES)
+CLIENT_INCLUDES+=$(GEOIP_USES)
+ifneq (,$(findstring USE_GEOIP,$(GEOIP_USES)))
 SERVER_LIBS+= -lGeoIP
-CLIENT_INCLUDES+= -DUSE_GEOIP
 CLIENT_LIBS+= -lGeoIP
+endif
+ifneq (,$(findstring USE_MMDB,$(GEOIP_USES)))
+SERVER_LIBS+= -lmaxminddb
+CLIENT_LIBS+= -lmaxminddb
 endif
 endif
 
@@ -229,17 +233,17 @@ tessfont: shared/tessfont.o
 	$(CXX) $(CXXFLAGS) -o tessfont shared/tessfont.o `freetype-config --libs` -lz
 
 install_client: client
-	cp -f tess_client	../bin_unix/$(PLATFORM_PREFIX)_client
+	cp -f tess_client ../bin_unix/$(PLATFORM_PREFIX)_client
 ifneq (,$(STRIP))
 	$(STRIP) ../bin_unix/$(PLATFORM_PREFIX)_client
 endif
 install_server: server
-	cp -f tess_server	../bin_unix/$(PLATFORM_PREFIX)_server
+	cp -f tess_server ../bin_unix/$(PLATFORM_PREFIX)_server
 ifneq (,$(STRIP))
 	$(STRIP) ../bin_unix/$(PLATFORM_PREFIX)_server
 endif
 install_master: master
-	cp -f tess_master	../bin_unix/$(PLATFORM_PREFIX)_master
+	cp sauer_master ../bin_unix/$(PLATFORM_PREFIX)_master
 ifneq (,$(STRIP))
 	$(STRIP) ../bin_unix/$(PLATFORM_PREFIX)_master
 endif
@@ -253,8 +257,8 @@ libenet: enet/libenet.a
 depend:
 	makedepend -Y -Ishared -Iengine -Igame $(CLIENT_OBJS:.o=.cpp)
 	makedepend -a -o.h.gch -Y -Ishared -Iengine -Igame $(CLIENT_PCH:.h.gch=.h)
-	makedepend -a -pstandalone/ -Y -DSTANDALONE=1 -Ishared -Iengine -Igame $(SERVER_MASTER_OBJS:standalone/%.o=%.cpp)
-	makedepend -a -pstandalone/ -o.h.gch -Y -DSTANDALONE=1 -Ishared -Iengine -Igame $(SERVER_PCH:standalone/%.h.gch=%.h)
+	makedepend -a -pstandalone/ -Y -DSTANDALONE -Ishared -Iengine -Igame $(SERVER_MASTER_OBJS:standalone/%.o=%.cpp)
+	makedepend -a -pstandalone/ -o.h.gch -Y -DSTANDALONE -Ishared -Iengine -Igame $(SERVER_PCH:standalone/%.h.gch=%.h)
 
 # DO NOT DELETE
 
@@ -353,10 +357,6 @@ engine/octarender.o: shared/glexts.h shared/glemu.h shared/iengine.h
 engine/octarender.o: shared/igame.h engine/world.h engine/octa.h
 engine/octarender.o: engine/light.h engine/texture.h engine/bih.h
 engine/octarender.o: engine/model.h
-engine/ovr.o: engine/engine.h shared/cube.h shared/tools.h shared/geom.h
-engine/ovr.o: shared/ents.h shared/command.h shared/glexts.h shared/glemu.h
-engine/ovr.o: shared/iengine.h shared/igame.h engine/world.h engine/octa.h
-engine/ovr.o: engine/light.h engine/texture.h engine/bih.h engine/model.h
 engine/physics.o: engine/engine.h shared/cube.h shared/tools.h shared/geom.h
 engine/physics.o: shared/ents.h shared/command.h shared/glexts.h
 engine/physics.o: shared/glemu.h shared/iengine.h shared/igame.h
@@ -415,7 +415,6 @@ engine/server.o: shared/ents.h shared/command.h shared/glexts.h
 engine/server.o: shared/glemu.h shared/iengine.h shared/igame.h
 engine/server.o: engine/world.h engine/octa.h engine/light.h engine/texture.h
 engine/server.o: engine/bih.h engine/model.h
-engine/server.o: game/z_ms_engineserver_override.h
 engine/serverbrowser.o: engine/engine.h shared/cube.h shared/tools.h
 engine/serverbrowser.o: shared/geom.h shared/ents.h shared/command.h
 engine/serverbrowser.o: shared/glexts.h shared/glemu.h shared/iengine.h
@@ -439,7 +438,7 @@ engine/texture.o: engine/engine.h shared/cube.h shared/tools.h shared/geom.h
 engine/texture.o: shared/ents.h shared/command.h shared/glexts.h
 engine/texture.o: shared/glemu.h shared/iengine.h shared/igame.h
 engine/texture.o: engine/world.h engine/octa.h engine/light.h
-engine/texture.o: engine/texture.h engine/bih.h engine/model.h engine/scale.h
+engine/texture.o: engine/texture.h engine/bih.h engine/model.h
 engine/ui.o: engine/engine.h shared/cube.h shared/tools.h shared/geom.h
 engine/ui.o: shared/ents.h shared/command.h shared/glexts.h shared/glemu.h
 engine/ui.o: shared/iengine.h shared/igame.h engine/world.h engine/octa.h
@@ -478,19 +477,8 @@ game/scoreboard.o: shared/ents.h shared/command.h shared/glexts.h
 game/scoreboard.o: shared/glemu.h shared/iengine.h shared/igame.h game/ai.h
 game/server.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/server.o: shared/ents.h shared/command.h shared/glexts.h shared/glemu.h
-game/server.o: shared/iengine.h shared/igame.h game/ai.h game/z_geoipstate.h
-game/server.o: game/z_maprotation.h game/z_triggers.h game/ctf.h
-game/server.o: game/z_persistteams.h game/z_servercommands.h
-game/server.o: game/z_setmaster_override.h game/z_log.h game/z_racemode.h
-game/server.o: game/z_sendmap.h game/z_servcmd.h game/z_autosendmap.h
-game/server.o: game/z_loadmap.h game/z_awards.h game/z_nodamage.h
-game/server.o: game/z_announcekills.h game/z_protectteamscores.h
-game/server.o: game/z_scripting.h game/z_gbans_override.h
-game/server.o: game/z_ms_gameserver_override.h game/z_mutes.h game/z_rename.h
-game/server.o: game/z_geoip.h game/z_geoipserver.h game/z_msgfilter.h
-game/server.o: game/z_maploaded.h game/extinfo.h game/aiman.h
-game/server.o: game/z_genericservercommands.h game/z_savemap.h game/z_spy.h
-game/server.o: game/z_mapsucks.h game/z_slay.h
+game/server.o: shared/iengine.h shared/igame.h game/ai.h game/ctf.h
+game/server.o: game/extinfo.h game/aiman.h
 game/waypoint.o: game/game.h shared/cube.h shared/tools.h shared/geom.h
 game/waypoint.o: shared/ents.h shared/command.h shared/glexts.h
 game/waypoint.o: shared/glemu.h shared/iengine.h shared/igame.h game/ai.h
@@ -525,7 +513,6 @@ standalone/engine/command.o: shared/iengine.h shared/igame.h engine/world.h
 standalone/engine/server.o: engine/engine.h shared/cube.h shared/tools.h
 standalone/engine/server.o: shared/geom.h shared/ents.h shared/command.h
 standalone/engine/server.o: shared/iengine.h shared/igame.h engine/world.h
-standalone/engine/server.o: game/z_ms_engineserver_override.h
 standalone/engine/worldio.o: engine/engine.h shared/cube.h shared/tools.h
 standalone/engine/worldio.o: shared/geom.h shared/ents.h shared/command.h
 standalone/engine/worldio.o: shared/iengine.h shared/igame.h engine/world.h
@@ -535,20 +522,7 @@ standalone/game/entities.o: shared/iengine.h shared/igame.h game/ai.h
 standalone/game/server.o: game/game.h shared/cube.h shared/tools.h
 standalone/game/server.o: shared/geom.h shared/ents.h shared/command.h
 standalone/game/server.o: shared/iengine.h shared/igame.h game/ai.h
-standalone/game/server.o: game/z_geoipstate.h game/z_maprotation.h
-standalone/game/server.o: game/z_triggers.h game/ctf.h game/z_persistteams.h
-standalone/game/server.o: game/z_servercommands.h game/z_setmaster_override.h
-standalone/game/server.o: game/z_log.h game/z_racemode.h game/z_sendmap.h
-standalone/game/server.o: game/z_servcmd.h game/z_autosendmap.h
-standalone/game/server.o: game/z_loadmap.h game/z_awards.h game/z_nodamage.h
-standalone/game/server.o: game/z_announcekills.h game/z_protectteamscores.h
-standalone/game/server.o: game/z_scripting.h game/z_gbans_override.h
-standalone/game/server.o: game/z_ms_gameserver_override.h game/z_mutes.h
-standalone/game/server.o: game/z_rename.h game/z_geoip.h game/z_geoipserver.h
-standalone/game/server.o: game/z_msgfilter.h game/z_maploaded.h
-standalone/game/server.o: game/extinfo.h game/aiman.h
-standalone/game/server.o: game/z_genericservercommands.h game/z_savemap.h
-standalone/game/server.o: game/z_spy.h game/z_mapsucks.h game/z_slay.h
+standalone/game/server.o: game/ctf.h game/extinfo.h game/aiman.h
 standalone/engine/master.o: shared/cube.h shared/tools.h shared/geom.h
 standalone/engine/master.o: shared/ents.h shared/command.h shared/iengine.h
 standalone/engine/master.o: shared/igame.h

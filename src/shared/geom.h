@@ -25,6 +25,7 @@ struct vec2
     float squaredlen() const { return dot(*this); }
     float magnitude() const  { return sqrtf(squaredlen()); }
     vec2 &normalize() { mul(1/magnitude()); return *this; }
+    vec2 &safenormalize() { float m = magnitude(); if(m) mul(1/m); return *this; }
     float cross(const vec2 &o) const { return x*o.y - y*o.x; }
     float squaredist(const vec2 &e) const { return vec2(*this).sub(e).squaredlen(); }
     float dist(const vec2 &e) const { return sqrtf(squaredist(e)); }
@@ -141,6 +142,7 @@ struct vec
     float magnitude2() const { return sqrtf(dot2(*this)); }
     float magnitude() const  { return sqrtf(squaredlen()); }
     vec &normalize()         { div(magnitude()); return *this; }
+    vec &safenormalize()     { float m = magnitude(); if(m) div(m); return *this; }
     bool isnormalized() const { float m = squaredlen(); return (m>0.99f && m<1.01f); }
     float squaredist(const vec &e) const { return vec(*this).sub(e).squaredlen(); }
     float dist(const vec &e) const { return sqrtf(squaredist(e)); }
@@ -311,6 +313,7 @@ struct vec4
     float magnitude() const  { return sqrtf(squaredlen()); }
     float magnitude3() const { return sqrtf(dot3(*this)); }
     vec4 &normalize() { mul(1/magnitude()); return *this; }
+    vec4 &safenormalize() { float m = magnitude(); if(m) mul(1/m); return *this; }
 
     vec4 &lerp(const vec4 &b, float t)
     {
@@ -1206,7 +1209,7 @@ struct ivec
     };
 
     ivec() {}
-    ivec(const vec &v) : x(int(v.x)), y(int(v.y)), z(int(v.z)) {}
+    explicit ivec(const vec &v) : x(int(v.x)), y(int(v.y)), z(int(v.z)) {}
     ivec(int a, int b, int c) : x(a), y(b), z(c) {}
     ivec(int d, int row, int col, int depth)
     {
@@ -1361,7 +1364,7 @@ struct bvec
 
     bvec() {}
     bvec(uchar x, uchar y, uchar z) : x(x), y(y), z(z) {}
-    bvec(const vec &v) : x((uchar)((v.x+1)*255/2)), y((uchar)((v.y+1)*255/2)), z((uchar)((v.z+1)*255/2)) {}
+    explicit bvec(const vec &v) : x(uchar((v.x+1)*(255.0f/2.0f))), y(uchar((v.y+1)*(255.0f/2.0f))), z(uchar((v.z+1)*(255.0f/2.0f))) {}
     explicit bvec(const bvec4 &v);
 
     uchar &operator[](int i)       { return v[i]; }
@@ -1495,7 +1498,7 @@ struct svec
 
     svec() {}
     svec(short x, short y, short z) : x(x), y(y), z(z) {}
-    svec(const ivec &v) : x(v.x), y(v.y), z(v.z) {}
+    explicit svec(const ivec &v) : x(v.x), y(v.y), z(v.z) {}
 
     short &operator[](int i) { return v[i]; }
     short operator[](int i) const { return v[i]; }
@@ -1762,7 +1765,7 @@ struct matrix4
     template<class T, class U> T transformnormal(const U &in) const
     {
         T v;
-        transform(in, v);
+        transformnormal(in, v);
         return v;
     }
 
@@ -1864,7 +1867,7 @@ struct hvec2
     half x, y;
 
     hvec2() {}
-    template<class T> hvec2(T x, T y) : x(x), y(y) {}
+    hvec2(float x, float y) : x(x), y(y) {}
     hvec2(const vec2 &v) : x(v.x), y(v.y) {}
 
     bool operator==(const hvec2 &h) const { return x == h.x && y == h.y; }
@@ -1876,7 +1879,7 @@ struct hvec
     half x, y, z;
 
     hvec() {}
-    template<class T> hvec(T x, T y, T z) : x(x), y(y), z(z) {}
+    hvec(float x, float y, float z) : x(x), y(y), z(z) {}
     hvec(const vec &v) : x(v.x), y(v.y), z(v.z) {}
 
     bool operator==(const hvec &h) const { return x == h.x && y == h.y && z == h.z; }
@@ -1888,8 +1891,8 @@ struct hvec4
     half x, y, z, w;
 
     hvec4() {}
-    template<class T> hvec4(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) {}
-    template<class T> hvec4(const vec &v, T w = 0) : x(v.x), y(v.y), z(v.z), w(w) {}
+    hvec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
+    hvec4(const vec &v, float w) : x(v.x), y(v.y), z(v.z), w(w) {}
     hvec4(const vec4 &v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
 
     bool operator==(const hvec4 &h) const { return x == h.x && y == h.y && z == h.z && w == h.w; }

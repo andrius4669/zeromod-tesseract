@@ -28,7 +28,7 @@
 // using the serverauth option allows people with an appropriate local authkey to connect regardless
 // serverpass ""
 
-// password that allows you to gain admin by "setmaster password_here" 
+// password that allows you to gain admin by "setmaster password_here"
 // local authkeys are more secure than this and should be used instead if possible
 // adminpass ""
 

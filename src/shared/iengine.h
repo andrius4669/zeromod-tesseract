@@ -277,7 +277,7 @@ extern void packvslot(vector<uchar> &buf, const VSlot *vs);
 
 // renderlights
 
-enum { L_NOSHADOW = 1<<0, L_NODYNSHADOW = 1<<1, L_VOLUMETRIC = 1<<2 };
+enum { L_NOSHADOW = 1<<0, L_NODYNSHADOW = 1<<1, L_VOLUMETRIC = 1<<2, L_NOSPEC = 1<<3 };
 
 // dynlight
 enum
@@ -312,6 +312,8 @@ extern void resethudmatrix();
 extern void pushhudmatrix();
 extern void flushhudmatrix(bool flushparams = true);
 extern void pophudmatrix(bool flush = true, bool flushparams = true);
+extern void pushhudscale(float sx, float sy = 0);
+extern void pushhudtranslate(float tx, float ty, float sx = 0, float sy = 0);
 extern void resethudshader();
 
 // renderparticles
@@ -369,19 +371,21 @@ static inline void addstain(int type, const vec &center, const vec &surface, flo
 // worldio
 extern bool load_world(const char *mname, const char *cname = NULL);
 extern bool save_world(const char *mname, bool nolms = false);
+extern void fixmapname(char *name);
 extern uint getmapcrc();
 extern void clearmapcrc();
 extern bool loadents(const char *fname, vector<entity> &ents, uint *crc = NULL);
+extern void validmapname(char *dst, const char *src, const char *prefix = NULL, const char *alt = "untitled", size_t maxlen = 100);
 
 // physics
 extern vec collidewall;
-extern bool collideinside;
+extern int collideinside;
 extern physent *collideplayer;
 
 extern void moveplayer(physent *pl, int moveres, bool local);
 extern bool moveplayer(physent *pl, int moveres, bool local, int curtime);
 extern void crouchplayer(physent *pl, int moveres, bool local);
-extern bool collide(physent *d, const vec &dir = vec(0, 0, 0), float cutoff = 0.0f, bool playercol = true);
+extern bool collide(physent *d, const vec &dir = vec(0, 0, 0), float cutoff = 0.0f, bool playercol = true, bool insideplayercol = false);
 extern bool bounce(physent *d, float secs, float elasticity, float waterfric, float grav);
 extern bool bounce(physent *d, float elasticity, float waterfric, float grav);
 extern void avoidcollision(physent *d, const vec &dir, physent *obstacle, float space);
@@ -414,7 +418,7 @@ extern void stopsounds();
 extern void initsound();
 
 // rendermodel
-enum { MDL_CULL_VFC = 1<<0, MDL_CULL_DIST = 1<<1, MDL_CULL_OCCLUDED = 1<<2, MDL_CULL_QUERY = 1<<3, MDL_FULLBRIGHT = 1<<4, MDL_NORENDER = 1<<5, MDL_MAPMODEL = 1<<6, MDL_NOBATCH = 1<<7, MDL_ONLYSHADOW = 1<<8 };
+enum { MDL_CULL_VFC = 1<<0, MDL_CULL_DIST = 1<<1, MDL_CULL_OCCLUDED = 1<<2, MDL_CULL_QUERY = 1<<3, MDL_FULLBRIGHT = 1<<4, MDL_NORENDER = 1<<5, MDL_MAPMODEL = 1<<6, MDL_NOBATCH = 1<<7, MDL_ONLYSHADOW = 1<<8, MDL_NOSHADOW = 1<<9, MDL_FORCESHADOW = 1<<10, MDL_FORCETRANSPARENT = 1<<11 };
 
 struct model;
 struct modelattach
@@ -464,8 +468,11 @@ extern void cleanragdoll(dynent *d);
 #define MAXTRANS 5000                  // max amount of data to swallow in 1 go
 
 extern int maxclients;
+extern volatile bool quitserver;
+extern bool quitwhenempty;
 
-enum { DISC_NONE = 0, DISC_EOP, DISC_LOCAL, DISC_KICK, DISC_MSGERR, DISC_IPBAN, DISC_PRIVATE, DISC_MAXCLIENTS, DISC_TIMEOUT, DISC_OVERFLOW, DISC_PASSWORD, DISC_NUM };
+enum { DISC_NONE = 0, DISC_EOP, DISC_LOCAL, DISC_KICK, DISC_MSGERR, DISC_IPBAN, DISC_PRIVATE, DISC_MAXCLIENTS, DISC_TIMEOUT, DISC_OVERFLOW, DISC_PASSWORD, DISC_NUM,
+       DISC_ENET_TIMEOUT, DISC_ENET_ERROR, DISC_NUM2 };
 
 extern void *getclientinfo(int i);
 extern ENetPeer *getclientpeer(int i);
@@ -480,7 +487,7 @@ extern uint getserverinfoip();
 extern const char *getclienthostname(int i);
 extern void localconnect();
 extern const char *disconnectreason(int reason);
-extern void disconnect_client(int n, int reason);
+extern void disconnect_client(int n, int reason, bool wait = false);
 extern void kicknonlocalclients(int reason = DISC_NONE);
 extern bool hasnonlocalclients();
 extern bool haslocalclients();
@@ -489,8 +496,9 @@ extern bool requestmasterf(int m, const char *fmt, ...) PRINTFARGS(2, 3);
 extern int findauthmaster(const char *desc, int old = -1);
 extern const char *getmasterauth(int m);
 extern void masterauthpriv_set(int m, int priv);
-extern void masterauthpriv_reset(int m);
-const int *masterauthpriv_get(int m);
+extern int masterauthpriv_get(int m);
+extern bool allowmasterauth(int m, int priv);
+extern bool getmasterbaninfo(int m, const char *&ident, int &disc, const char *&wlauth, const char *&banmsg);
 extern bool isdedicatedserver();
 
 // serverbrowser
@@ -539,10 +547,4 @@ extern void freepubkey(void *pubkey);
 extern void *genchallenge(void *pubkey, const void *seed, int seedlen, vector<char> &challengestr);
 extern void freechallenge(void *answer);
 extern bool checkchallenge(const char *answerstr, void *correct);
-
-// ovr
-namespace ovr
-{
-    extern void reset();
-}
 

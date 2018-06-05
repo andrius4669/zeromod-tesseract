@@ -1,13 +1,44 @@
-#ifndef Z_RACEMODE_H
+#ifdef Z_RACEMODE_H
+#error "already z_racemode.h"
+#endif
 #define Z_RACEMODE_H
 
-#include "z_sendmap.h"
-#include "z_autosendmap.h"
-#include "z_loadmap.h"
+#ifndef Z_SENDMAP_H
+#error "want z_sendmap.h"
+#endif
+#ifndef Z_AUTOSENDMAP_H
+#error "want z_autosendmap.h"
+#endif
+#ifndef Z_LOADMAP_H
+#error "want z_loadmap.h"
+#endif
+#ifndef Z_FORMAT_H
+#error "want z_format.h"
+#endif
+#ifndef Z_RECORDS_H
+#error "want z_records.h"
+#endif
+
+enum { Z_RC_NONE = 0, Z_RC_EDITMODE, Z_RC_EDITING };
+
+#define RACE_DEFAULT_RADIUS     32
+#define RACE_MAXPLACES          256
 
 bool z_racemode = false;
-VARFN(racemode, defaultracemode, 0, 0, 1, { if(clients.empty()) z_racemode = defaultracemode!=0; });
-static void z_racemode_trigger(int type) { z_racemode = defaultracemode!=0; }
+VARF(racemode_enabled, 0, 0, 1,
+{
+    if(!racemode_enabled) z_racemode = false;
+});
+VARF(racemode_default, 0, 0, 1,
+{
+    if(!racemode_enabled) z_racemode = false;
+    else if(clients.empty()) z_racemode = !!racemode_default;
+});
+static void z_racemode_trigger(int type)
+{
+    z_enable_command("racemode", !!racemode_enabled);
+    z_racemode = racemode_enabled && racemode_default;
+}
 Z_TRIGGER(z_racemode_trigger, Z_TRIGGER_STARTUP);
 Z_TRIGGER(z_racemode_trigger, Z_TRIGGER_NOCLIENTS);
 
@@ -19,15 +50,23 @@ void z_servcmd_racemode(int argc, char **argv, int sender)
 }
 SCOMMANDA(racemode, PRIV_ADMIN, z_servcmd_racemode, 1);
 
+VAR(racemode_allowcheat, 0, 0, 1);
+VAR(racemode_allowedit, 0, 0, 1);
+VAR(racemode_alloweditmode, 0, 1, 1);
+VAR(racemode_allowmultiplaces, 0, 1, 1);
+VAR(racemode_hideeditors, 0, 0, 1);
+VAR(racemode_strict, 0, 0, 1);              // prefer strict logic to most convenient behavour
+
 VAR(racemode_waitmap, 0, 10000, INT_MAX);
+VAR(racemode_sendspectators, 0, 1, 1);
 VAR(racemode_startmillis, 0, 5000, INT_MAX);
 VAR(racemode_gamelimit, 0, 0, INT_MAX);
 VAR(racemode_winnerwait, 0, 30000, INT_MAX);
 VAR(racemode_finishmillis, 0, 5000, INT_MAX);
-VAR(racemode_maxents, 0, 2000, MAXENTS);
+VAR(racemode_maxents, 0, 1000, MAXENTS);
+VAR(racemode_minplaces, 1, 1, RACE_MAXPLACES);
 
-#define RACE_DEFAULT_RADIUS     32
-#define RACE_MAXPLACES          20
+
 
 struct z_raceendinfo
 {
@@ -52,8 +91,58 @@ ICOMMAND(rend, "sfffii", (char *map, float *x, float *y, float *z, int *r, int *
     e.rend.o.y = *y;
     e.rend.o.z = *z;
     e.rend.radius = *r > 0 ? *r : RACE_DEFAULT_RADIUS;
-    e.rend.place = clamp(*p, 1, RACE_MAXPLACES) - 1;    /* in command specified place starts from 1, in struct it starts from 0 */
+    e.rend.place = clamp(*p, racemode_minplaces, RACE_MAXPLACES) - 1;   /* in command specified place starts from 1, in struct it starts from 0 */
 });
+
+VARF(racemode_record, 0, 0, 1,
+{
+    if(!racemode_record) z_clearrecords(M_EDIT);
+});
+
+VAR(racemode_record_atstart, 0, 1, 1); // whether to announce current record holder at start of race
+VAR(racemode_record_atend, 0, 1, 1); // whether to announce current record holder at end of race
+SVAR(racemode_record_style_atstart, "\f6RECORD HOLDER: \f7%O (%o)");
+SVAR(racemode_record_style_atend, "\f6RECORD HOLDER: \f7%O (%o)");
+
+static void z_racemode_showcurrentrecord(const char *fmt)
+{
+    z_findcurrentrecord();
+    if(z_currentrecord < 0) return;
+    z_record &r = z_records[z_currentrecord];
+
+    z_formattemplate ft[] =
+    {
+        { 'O', "%s", (const void *)r.name },
+        { 'o', "%s", (const void *)formatmillisecs(r.time) },
+        { 0, NULL, NULL }
+    };
+    string buf;
+    z_format(buf, sizeof(buf), fmt, ft);
+    if(*buf) sendservmsg(buf);
+}
+
+// styling values
+SVAR(racemode_style_winners, "\f6RACE WINNERS: %W");
+SVAR(racemode_style_winplace, "\f2%P PLACE: \f7%C (%t)");
+vector<char *> racemode_placestrings;
+void racemode_style_places(tagval *args, int numargs)
+{
+    loopv(racemode_placestrings) delete[] racemode_placestrings[i];
+    racemode_placestrings.setsize(0);
+    loopi(numargs) racemode_placestrings.add(newstring(args[i].getstr()));
+}
+COMMAND(racemode_style_places, "sV");
+SVAR(racemode_style_enterplace, "\f6race: \f7%C \f2won \f6%P PLACE!! \f7(%t)");
+SVAR(racemode_style_leaveplace, "\f6race: \f7%C \f2left \f6%P PLACE!!");
+SVAR(racemode_style_starting, "\f6race: \f2starting race in %T...");
+SVAR(racemode_style_start, "\f6race: \f7START!!");
+SVAR(racemode_style_timeleft, "\f2time left: %T");
+SVAR(racemode_style_ending, "\f6race: \f2ending race in %T...");
+
+SVAR(racemode_message_gotmap, "since you got the map, you may continue racing now");
+SVAR(racemode_message_respawn, "since you respawned, you may continue racing");
+SVAR(racemode_message_editmode, "edit mode is not allowed in racemode. please suicide to continue racing");
+SVAR(racemode_message_editing, "editing map is not allowed in racemode. please getmap or reconnect to continue racing");
 
 struct raceservmode: servmode
 {
@@ -65,7 +154,7 @@ struct raceservmode: servmode
     int minraceend;     // used when only non-first places are specified
     struct winner
     {
-        int cn, racemillis;
+        int cn, racemillis, lifesequence;
         winner(): cn(-1), racemillis(0) {}
     };
     vector<winner> race_winners;
@@ -76,8 +165,25 @@ struct raceservmode: servmode
     void cleanup()
     {
         reset();
-        loopv(clients) clients[i]->state.flags = 0;
+        loopv(clients) clients[i]->state.flags = clients[i]->state.frags = 0;
     }
+
+    void initclient(clientinfo *ci, packetbuf &p, bool connecting)
+    {
+        // TODO: possibly notify client about modified mode
+        if(ci)
+        {
+            if(connecting) ci->state.flags = 0;
+        }
+    }
+
+    bool canspawn(clientinfo *ci, bool connecting = false)
+    {
+        return state >= ST_STARTED && state <= ST_INT;
+    }
+
+    bool hidefrags() { return true; }
+    int fragvalue(clientinfo *victim, clientinfo *actor) { return 0; }
 
     void reset()
     {
@@ -111,7 +217,7 @@ struct raceservmode: servmode
             z_raceendinfo &r = raceends.add();
             r.o = e.o;
             r.radius = e.attr3 > 0 ? e.attr3 : RACE_DEFAULT_RADIUS;
-            r.place = min(-e.attr2, RACE_MAXPLACES) - 1;
+            r.place = clamp(-e.attr2, racemode_minplaces, RACE_MAXPLACES) - 1;
             while(race_winners.length() <= r.place) race_winners.add();
             if(r.place < minraceend) minraceend = r.place;
             if(racemode_maxents && raceends.length()>=racemode_maxents)
@@ -128,92 +234,161 @@ struct raceservmode: servmode
         return dx*dx + dy*dy <= r.radius*r.radius && fabs(dz) <= r.radius;
     }
 
-    const char *placename(int n)
+    static const char *placename(int n)
     {
-        switch(++n)
+        static string buf;
+        if(racemode_placestrings.empty())
         {
-            case 1: return "FIRST";
-            case 2: return "SECOND";
-            case 3: return "THIRD";
-            case 4: return "FOURTH";
-            case 5: return "FIFTH";
-            default: return tempformatstring("%dth", n);
+            // fill with default set of values
+            racemode_placestrings.add(newstring("FIRST"));
+            racemode_placestrings.add(newstring("SECOND"));
+            racemode_placestrings.add(newstring("THIRD"));
+            racemode_placestrings.add(newstring("%pth"));
         }
+        const char *fs = racemode_placestrings.inrange(n) ? racemode_placestrings[n] : racemode_placestrings.last();
+        z_formattemplate tmp[] =
+        {
+            { 'p', "%d", (const void *)(long)(n+1) },
+            { 0, NULL, NULL }
+        };
+        z_format(buf, sizeof(buf), fs, tmp);
+        return buf;
+    }
+
+    static void updateclientfragsnum(clientinfo &ci, int val)
+    {
+        ci.state.frags = val;
+        sendresume(&ci);
+    }
+
+    int hasplace(clientinfo &ci)
+    {
+        loopv(race_winners) if(race_winners[i].cn == ci.clientnum) return race_winners.length() - i;
+        return 0;
     }
 
     void checkplaces()
     {
         // start intermission 5 seconds after last place has been taken (or its too less clients to take any more places)
-        int numfinished = 0, numavaiable = 0;
+        uint cl_finished = 0, cl_unfinished = 0;
+        loopv(clients) if(clients[i]->state.state!=CS_SPECTATOR)
+        {
+            // state.frags is reused for place number
+            if(clients[i]->state.frags > 0) cl_finished++;
+            else cl_unfinished++;
+        }
+        uint pl_finished = 0, pl_available = 0;
         loopv(race_winners)
         {
-            if(race_winners[i].cn >= 0) numfinished++;
-            else numavaiable++;
+            if(race_winners[i].cn >= 0) pl_finished++;
+            else pl_available++;
         }
-        int numplayers = numclients(-1, true, false), unfinished = numplayers-numfinished;
-        if(numplayers <= 0) return;
-        if(numavaiable <= 0 || unfinished <= 0)
+        if((cl_finished + cl_unfinished) <= 0) return;  // don't end race if everyone leaves
+        if(cl_unfinished <= 0 || pl_available <= 0)
         {
+            // enter finished state if there are no places left or everyone already finished race
             state = ST_FINISHED;
             statemillis = countermillis = totalmillis;
         }
-        else if(racemode_winnerwait && numfinished > 0 && (!statemillis || statemillis-totalmillis > racemode_winnerwait))
+        else if(racemode_winnerwait && cl_finished > 0 && (!statemillis || statemillis-totalmillis > racemode_winnerwait))
         {
+            // finish race after racemode_winnerwait
             statemillis = totalmillis + racemode_winnerwait;
             if(!statemillis) statemillis = 1;
             countermillis = totalmillis;
         }
     }
 
+    static bool clientready(clientinfo *ci)
+    {
+        if(z_autosendmap == 2) return ci->mapcrc && !ci->getmap && ci->xi.maploaded && totalmillis-ci->xi.maploaded > 1000 && !ci->warned;
+        if(z_autosendmap == 1) return !ci->getmap && ci->xi.maploaded && totalmillis-ci->xi.maploaded > 1000;
+        return ci->mapcrc && ci->xi.maploaded && totalmillis-ci->xi.maploaded > 1000;
+    }
+
     void moved(clientinfo *ci, const vec &oldpos, bool oldclip, const vec &newpos, bool newclip)
     {
         if(state != ST_STARTED && state != ST_FINISHED) return;
-        if(ci->state.flags) return;     /* flags are reused for race cheating info */
-        int avaiable_place = -1;
+        if(ci->state.flags || !clientready(ci)) return; /* flags are reused for race cheating info */
+        int available_place = -1;
         loopv(race_winners)
         {
             int cn = race_winners[i].cn;
-            if(cn == ci->clientnum) break;
+            if(cn == ci->clientnum && (!racemode_allowmultiplaces || race_winners[i].lifesequence == ci->state.lifesequence)) break;
             if(cn < 0)
             {
-                avaiable_place = i;
+                available_place = i;
                 break;
             }
         }
-        if(avaiable_place >= 0) loopv(raceends)
+        if(available_place >= 0) loopv(raceends)
         {
             z_raceendinfo &r = raceends[i];
-            if(r.place > avaiable_place && r.place > minraceend) continue;  /* don't skip is place is already minimal */
+            if(r.place > available_place && r.place > minraceend) continue;  /* don't skip if place is already minimal */
             if(!reached_raceend(r, newpos)) continue;
             int racemillis = 0;
-            for(int j = race_winners.length()-1; j > avaiable_place; j--) if(race_winners[j].cn == ci->clientnum)
+            // leave lower places to allow others to win
+            // remark: this is still illogical sometimes...
+            for(int j = race_winners.length()-1; j > available_place; j--)
             {
-                race_winners[j].cn = -1;
-                racemillis = race_winners[j].racemillis;
+                if(race_winners[j].cn == ci->clientnum && (!racemode_strict || !racemode_allowmultiplaces || race_winners[j].lifesequence == ci->state.lifesequence))
+                {
+                    race_winners[j].cn = -1;
+                    // don't increase player's racetime
+                    racemillis = race_winners[j].racemillis;
+                }
             }
-            if(!racemillis) racemillis = gamemillis-ci->state.lastdeath;    /* lastdeath is reused for spawntime */
-            race_winners[avaiable_place].cn = ci->clientnum;
-            race_winners[avaiable_place].racemillis = racemillis;
-            sendservmsgf("\f6race: \f7%s \f2won \f6%s PLACE!! \f7(%s)", colorname(ci), placename(avaiable_place), formatmillisecs(racemillis));
+            if(!racemillis) racemillis = totalmillis - ci->state.lastdeath;      /* lastdeath is reused for spawntime */
+            race_winners[available_place].cn = ci->clientnum;
+            race_winners[available_place].racemillis = racemillis;
+            race_winners[available_place].lifesequence = ci->state.lifesequence;
+
+            z_formattemplate ft[] =
+            {
+                { 'C', "%s", (const void *)colorname(ci) },
+                { 'c', "%s", (const void *)ci->name },
+                { 'n', "%d", (const void *)(long)ci->clientnum },
+                { 'P', "%s", (const void *)placename(available_place) },
+                { 'p', "%d", (const void *)(long)(available_place+1) },
+                { 't', "%s", (const void *)formatmillisecs(racemillis) },
+                { 0, NULL, NULL }
+            };
+            string buf;
+            z_format(buf, sizeof(buf), racemode_style_enterplace, ft);
+            if(buf[0]) sendservmsg(buf);
+
+            int plv = race_winners.length() - available_place;
+            if(ci->state.frags < plv) updateclientfragsnum(*ci, plv);
+
+            // possibly record it
+            if(racemode_record) z_newrecord(ci, racemillis);
+
             break;
         }
         if(state == ST_STARTED) checkplaces();
     }
 
+    void setracecheat(clientinfo &ci, int val)
+    {
+        bool changed = val != ci.state.flags;
+        ci.state.flags = val;
+        if(changed && !hasplace(ci)) updateclientfragsnum(ci, -val);
+    }
+
     static void warnracecheat(clientinfo *ci)
     {
-        if(ci->state.flags != 1 && ci->state.flags != 2) return;
-        sendf(ci->clientnum, 1, "ris", N_SERVMSG, ci->state.flags == 1
-            ? "edit mode is not allowed in racemode. please suicide to continue racing"
-            : "editing map is not allowed in racemode. please getmap or reconnect to continue racing");
+        if(ci->state.flags != Z_RC_EDITMODE && ci->state.flags != Z_RC_EDITING) return;
+        sendf(ci->clientnum, 1, "ris", N_SERVMSG, ci->state.flags == Z_RC_EDITMODE ? racemode_message_editmode : racemode_message_editing);
     }
 
     void racecheat(clientinfo *ci, int type)
     {
-        if((state < ST_STARTED && type < 2) || state > ST_FINISHED) return;
+        if(racemode_allowcheat) { setracecheat(*ci, Z_RC_NONE); return; }
+        if(!racemode_alloweditmode && type == Z_RC_EDITMODE) type = Z_RC_EDITING;       // treat editmode as editing, if not allowed
+        if((state < ST_STARTED && type < Z_RC_EDITING) || state > ST_FINISHED) return;  // editmode is allright before match starts
         if(ci->state.flags < type)
         {
-            ci->state.flags = type;
+            setracecheat(*ci, type);
             warnracecheat(ci);
         }
     }
@@ -228,10 +403,60 @@ struct raceservmode: servmode
         if(disconnecting)
         {
             ci->state.flags = 0;    /* flags field is reused for cheating info */
-            loopvrev(race_winners) if(race_winners[i].cn == ci->clientnum)
+            ci->state.frags = 0;
+            int npl = race_winners.length();
+            int leftplace = -1;
+            for(int i = npl - 1; i >= 0; i--) if(race_winners[i].cn == ci->clientnum)
             {
-                sendservmsgf("\f6race: \f7%s \f2left \f6%s PLACE!!", colorname(ci), placename(i));
+                if(state < ST_INT)
+                {
+                    z_formattemplate ft[] =
+                    {
+                        { 'C', "%s", (const void *)colorname(ci) },
+                        { 'c', "%s", (const void *)ci->name },
+                        { 'n', "%d", (const void *)(long)ci->clientnum },
+                        { 'P', "%s", (const void *)placename(i) },
+                        { 'p', "%d", (const void *)(long)(i+1) },
+                        { 't', "%s", (const void *)formatmillisecs(race_winners[i].racemillis) },
+                        { 0, NULL, NULL }
+                    };
+                    string buf;
+                    z_format(buf, sizeof(buf), racemode_style_leaveplace, ft);
+                    if(*buf) sendservmsg(buf);
+                }
                 race_winners[i].cn = -1;
+                leftplace = i;
+            }
+            if(leftplace >= 0)
+            {
+                // silently shift places
+                for(int i = leftplace; i < npl; i++)
+                {
+                    if(racemode_strict && i > minraceend) break;
+                    if(race_winners[i].cn < 0)
+                    {
+                        int rpl = -1;
+                        for(int j = i + 1; j < npl; j++)
+                        {
+                            if(racemode_strict && j > minraceend) break;
+                            if(race_winners[j].cn >= 0)
+                            {
+                                rpl = j;
+                                break;
+                            }
+                        }
+                        if(rpl < 0) break;
+                        // cn racemillis lifesequence
+                        race_winners[i] = race_winners[rpl];
+                        race_winners[rpl].cn = -1;
+                        clientinfo *ci = getinfo(race_winners[i].cn);
+                        if(ci)
+                        {
+                            int plv = npl - i;
+                            if(ci->state.frags < plv) updateclientfragsnum(*ci, plv);
+                        }
+                    }
+                }
             }
         }
         if(state == ST_STARTED) checkplaces();
@@ -239,22 +464,33 @@ struct raceservmode: servmode
 
     void spawned(clientinfo *ci)
     {
-        if(ci->state.flags == 1)
+        if(ci->state.flags == Z_RC_EDITMODE)
         {
-            ci->state.flags = 0;
-            if(ci->state.aitype==AI_NONE) sendf(ci->clientnum, 1, "ris", N_SERVMSG, "since you respawned, you may continue racing");
+            setracecheat(*ci, Z_RC_NONE);
+            if(ci->state.aitype==AI_NONE) sendf(ci->clientnum, 1, "ris", N_SERVMSG, racemode_message_respawn);
         }
-        else if(ci->state.flags == 2 && ci->state.aitype==AI_NONE) warnracecheat(ci);
+        else if(ci->state.flags == Z_RC_EDITING && ci->state.aitype==AI_NONE) warnracecheat(ci);
     }
 
     static void sendmaptoclients()
     {
-        if(z_autosendmap == 1)
+        switch(z_autosendmap)
         {
-            sendservmsg("[sending map to clients]");
-            loopv(clients) if(clients[i]->state.aitype==AI_NONE) z_sendmap(clients[i], NULL, NULL, true, false);
+            case 0:
+                sendservmsg("[waiting for clients to load map]");
+                return;
+            case 1:
+                sendservmsg("[sending map to clients]");
+                loopv(clients) if(clients[i]->state.aitype==AI_NONE && (racemode_sendspectators || clients[i]->state.state!=CS_SPECTATOR))
+                {
+                    z_sendmap(clients[i], NULL, NULL, true, false);
+                    clients[i]->xi.mapsent = totalmillis ? totalmillis : 1;
+                }
+                return;
+            case 2:
+                sendservmsg("[waiting for clients to load map]");
+                return;
         }
-        else sendservmsg("[waiting for clients to load map]");
     }
 
     static bool canstartrace()
@@ -262,18 +498,7 @@ struct raceservmode: servmode
         if(z_autosendmap != 1 && !smapname[0]) return true;
         loopv(clients) if(clients[i]->state.aitype == AI_NONE && clients[i]->state.state != CS_SPECTATOR)
         {
-            if(z_autosendmap == 0)
-            {
-                if(!clients[i]->mapcrc || !clients[i]->maploaded) return false;
-            }
-            else if(z_autosendmap == 1)
-            {
-                if(clients[i]->getmap || !clients[i]->maploaded) return false;
-            }
-            else
-            {
-                if(!clients[i]->mapcrc || clients[i]->getmap || !clients[i]->maploaded) return false;
-            }
+            if(!clientready(clients[i])) return false;
         }
         return true;
     }
@@ -283,23 +508,9 @@ struct raceservmode: servmode
         return secs >= 60 ? (secs % 60 == 0) : secs >= 30 ? (secs % 10 == 0) : secs >= 5 ? (secs % 5 == 0) : (secs > 0);
     }
 
-    static const char *formatsecs(int secs)
-    {
-        int mins = secs / 60;
-        secs %= 60;
-        if(!mins) return tempformatstring("%d second%s", secs, secs != 1 ? "s" : "");
-        else if(mins && !secs) return tempformatstring("%d minute%s", mins, mins != 1 ? "s" : "");
-        else return tempformatstring("%d minute%s %d second%s", mins, mins != 1 ? "s" : "", secs, secs != 1 ? "s" : "");
-    }
+    bool holdpause() { return state == ST_WAITMAP || state == ST_READY; }
 
-    static const char *formatmillisecs(int ms)
-    {
-        int mins = ms / 60000;
-        ms %= 60000;
-        if(!mins) return tempformatstring("%d.%03d sec", ms/1000, ms%1000);
-        else if(mins && ms) return tempformatstring("%d min %d.%03d sec", mins, ms/1000, ms%1000);
-        else return tempformatstring("%d min", mins);
-    }
+    void pausedupdate() { update(); }
 
     void update()
     {
@@ -349,7 +560,20 @@ struct raceservmode: servmode
                 {
                     countermillis += 1000;
                     int secsleft = (racemode_startmillis - (totalmillis - statemillis) + 500)/1000;
-                    if(shouldshowtimer(secsleft)) sendservmsgf("\f6race: \f2starting race in %s...", formatsecs(secsleft));
+                    if(shouldshowtimer(secsleft))
+                    {
+                        vector<char> timebuf;
+                        z_formatsecs(timebuf, (uint)secsleft);
+                        timebuf.add(0);
+                        z_formattemplate ft[] =
+                        {
+                            { 'T', "%s", (const void *)timebuf.getbuf() },
+                            { 0, NULL, NULL }
+                        };
+                        string buf;
+                        z_format(buf, sizeof(buf), racemode_style_starting, ft);
+                        if(buf[0]) sendservmsg(buf);
+                    }
                 }
                 if(totalmillis-statemillis>=racemode_startmillis)
                 {
@@ -362,12 +586,13 @@ struct raceservmode: servmode
                     }
                     else statemillis = 0;
                     pausegame(false, NULL);
-                    sendservmsg("\f6race: \f7START!!");
+                    if(racemode_style_start[0]) sendservmsg(racemode_style_start);
                     loopv(clients) if(clients[i]->state.state != CS_SPECTATOR)
                     {
                         if(clients[i]->state.state!=CS_EDITING) sendspawn(clients[i]);
                         else racecheat(clients[i], 1);
                     }
+                    if(racemode_record && racemode_record_atstart) z_racemode_showcurrentrecord(racemode_record_style_atstart);
                 }
                 break;
 
@@ -378,7 +603,20 @@ struct raceservmode: servmode
                     {
                         countermillis += 1000;
                         int secsleft = (statemillis - totalmillis + 500)/1000;
-                        if(shouldshowtimer(secsleft)) sendservmsgf("\f6race: \f2time left: %s", formatsecs(secsleft));
+                        if(shouldshowtimer(secsleft))
+                        {
+                            vector<char> timebuf;
+                            z_formatsecs(timebuf, (uint)secsleft);
+                            timebuf.add(0);
+                            z_formattemplate ft[] =
+                            {
+                                { 'T', "%s", (const void *)timebuf.getbuf() },
+                                { 0, NULL, NULL }
+                            };
+                            string buf;
+                            z_format(buf, sizeof(buf), racemode_style_timeleft, ft);
+                            if(buf[0]) sendservmsg(buf);
+                        }
                     }
                     if(statemillis-totalmillis <= 0)
                     {
@@ -393,7 +631,20 @@ struct raceservmode: servmode
                 {
                     countermillis += 1000;
                     int secsleft = (racemode_finishmillis - (totalmillis - statemillis) + 500)/1000;
-                    if(shouldshowtimer(secsleft)) sendservmsgf("\f6race: \f2ending race in %s...", formatsecs(secsleft));
+                    if(shouldshowtimer(secsleft))
+                    {
+                        vector<char> timebuf;
+                        z_formatsecs(timebuf, (uint)secsleft);
+                        timebuf.add(0);
+                        z_formattemplate ft[] =
+                        {
+                            { 'T', "%s", (const void *)timebuf.getbuf() },
+                            { 0, NULL, NULL }
+                        };
+                        string buf;
+                        z_format(buf, sizeof(buf), racemode_style_ending, ft);
+                        if(buf[0]) sendservmsg(buf);
+                    }
                 }
                 if(totalmillis-statemillis >= racemode_finishmillis) startintermission();
                 break;
@@ -404,40 +655,59 @@ struct raceservmode: servmode
         }
     }
 
+    int timeleft() const
+    {
+        return (state == ST_STARTED && statemillis) ? max((statemillis - totalmillis + 500)/1000, 0) : 0;
+    }
+
     void intermission()
     {
-        vector<char> buf;
-        const char * const msg_win = "\f6RACE WINNERS:";
-        const char * const msg_plc = " PLACE: \f7";
-        const char *msg_p;
-        bool won = false;
-
         if(state < ST_STARTED) pausegame(false, NULL);
         state = ST_INT;
         DELETEP(mapdata);
+
+        string tmp;
+        vector<char> buf;
+
         loopv(race_winners) if(race_winners[i].cn >= 0)
         {
             clientinfo *ci = getinfo(race_winners[i].cn);
             if(!ci) continue;
-            if(!won) buf.put(msg_win, strlen(msg_win)); /* first time executing this */
-            won = true;
-            buf.add(' ');
-            buf.add('\f');
-            buf.add('2');
-            msg_p = placename(i);
-            buf.put(msg_p, strlen(msg_p));
-            buf.put(msg_plc, strlen(msg_plc));
-            msg_p = colorname(ci);
-            buf.put(msg_p, strlen(msg_p));
-            buf.add(' ');
-            buf.add('(');
-            msg_p = formatmillisecs(race_winners[i].racemillis);
-            buf.put(msg_p, strlen(msg_p));
-            buf.add(')');
+
+            z_formattemplate style_tmp[] =
+            {
+                { 'p', "%d", (const void *)(long)(i+1) },
+                { 'P', "%s", (const void *)placename(i) },
+                { 'C', "%s", (const void *)colorname(ci) },
+                { 'c', "%s", (const void *)ci->name },
+                { 'n', "%d", (const void *)(long)ci->clientnum },
+                { 't', "%s", (const void *)formatmillisecs(race_winners[i].racemillis) },
+                { 0, NULL, NULL }
+            };
+
+            if(!buf.empty()) buf.add(' ');  // separate win entries by space
+            z_format(tmp, sizeof(tmp), racemode_style_winplace, style_tmp);
+            buf.put(tmp, strlen(tmp));
         }
-        if(!won) return;
-        buf.add('\0');
-        sendservmsg(buf.getbuf());
+
+        if(buf.empty()) return; // no winners
+
+        buf.add(0);
+        z_formattemplate style_tmp[] =
+        {
+            { 'W', "%s", (const void *)buf.getbuf() },
+            { 0, NULL, NULL }
+        };
+        z_format(tmp, sizeof(tmp), racemode_style_winners, style_tmp);
+
+        if(tmp[0]) sendservmsg(tmp);
+
+        if(racemode_record && racemode_record_atend) z_racemode_showcurrentrecord(racemode_record_style_atend);
+    }
+
+    bool shouldblockgameplay(clientinfo *ci)
+    {
+        return racemode_hideeditors && ci->state.flags;
     }
 };
 
@@ -447,21 +717,23 @@ bool isracemode()
     return smode==&racemode;
 }
 
-void race_gotmap(clientinfo *ci)
+void race_maploaded(clientinfo *ci)
 {
     extern raceservmode racemode;
-    if(smode==&racemode && ci->state.flags > 0)
+    if(smode==&racemode)
     {
-        ci->state.flags = ci->state.state==CS_EDITING ? 1 : 0;
-        if(ci->state.flags) raceservmode::warnracecheat(ci);
-        else sendf(ci->clientnum, 1, "ris", N_SERVMSG, "since you got the map, you may continue racing now");
+        if(ci->state.flags > Z_RC_NONE && !ci->warned)
+        {
+            if(!racemode_allowcheat) racemode.setracecheat(*ci, ci->state.state!=CS_EDITING ? 0 : racemode_alloweditmode ? Z_RC_EDITMODE : Z_RC_EDITING);
+            else racemode.setracecheat(*ci, Z_RC_NONE);
+            if(ci->state.flags) raceservmode::warnracecheat(ci);
+            else sendf(ci->clientnum, 1, "ris", N_SERVMSG, racemode_message_gotmap);
+        }
+        else if(!ci->state.flags && ci->warned)
+        {
+            if(!racemode_allowcheat) racemode.setracecheat(*ci, Z_RC_EDITING);
+            else racemode.setracecheat(*ci, Z_RC_NONE);
+            if(ci->state.flags) raceservmode::warnracecheat(ci);
+        }
     }
 }
-
-bool holdpausecontrol()
-{
-    extern raceservmode racemode;
-    return smode==&racemode && (racemode.state==racemode.ST_WAITMAP || racemode.state==racemode.ST_READY);
-}
-
-#endif // Z_RACEMODE_H

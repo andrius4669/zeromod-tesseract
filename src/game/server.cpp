@@ -2119,7 +2119,7 @@ namespace server
         else
         {
             if(smapname[0]) changemap(smapname, gamemode);
-            else changemap("", 0);
+            else changemap("", 1);
         }
     }
 
@@ -2923,7 +2923,7 @@ namespace server
         else if(matchstring(cmd, cmdlen, "cleargbans"))
             gbans.clear();
         else if(sscanf(cmd, "addgban %100s", val) == 1)
-            gbans.add(val);
+            ipbans.add(val);
     }
 #endif
 
@@ -3459,7 +3459,6 @@ namespace server
             case N_SWITCHCOLOR:
             {
                 ci->playercolor = getint(p);
-                if(ci->spy) break;
                 QUEUE_MSG;
                 break;
             }

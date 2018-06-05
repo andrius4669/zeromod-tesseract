@@ -1,7 +1,19 @@
-#ifndef Z_MS_GAMESERVER_OVERRIDE_H
-#define Z_MS_GAMESERVER_OVERRIDE_H 1
+#ifdef Z_MS_GAMESERVER_OVERRIDE_H
+#error "already z_ms_gameserver_override.h"
+#endif
+#define Z_MS_GAMESERVER_OVERRIDE_H
 
-#include "z_gbans_override.h"
+#ifndef Z_GBANS_OVERRIDE_H
+#error "want z_gbans_override.h"
+#endif
+
+VAR(authconnect, 0, 1, 2);
+VAR(anyauthconnect, 0, 0, 1);
+
+bool z_allowauthconnect(int priv = PRIV_ADMIN)
+{
+    return authconnect < 2 ? authconnect!=0 : priv>=PRIV_ADMIN;
+}
 
 clientinfo *findauth(int m, uint id)
 {
@@ -20,7 +32,11 @@ void authfailed(clientinfo *ci)
     for(int m = findauthmaster(ci->authdesc, om); m >= 0; m = findauthmaster(ci->authdesc, m))
     {
         if(!ci->authreq) { if(!nextauthreq) nextauthreq = 1; ci->authreq = nextauthreq++; }
-        if(requestmasterf(m, "reqauth %u %s\n", ci->authreq, ci->authname)) { ci->authmaster = m; break; }
+        if(requestmasterf(m, "reqauth %u %s\n", ci->authreq, ci->authname))
+        {
+            ci->authmaster = m;
+            break;
+        }
     }
     if(ci->authmaster < 0)
     {
@@ -34,17 +50,30 @@ void authfailed(int m, uint id)
     authfailed(findauth(m, id));
 }
 
-void authsucceeded(int m, uint id, int dpriv = PRIV_AUTH)
+void authsucceeded(int m, uint id, int priv = PRIV_AUTH)
 {
-    const int *privp = masterauthpriv_get(m);
-    int priv = privp ? *privp : dpriv;
-    masterauthpriv_reset(m);
-
     clientinfo *ci = findauth(m, id);
     if(!ci) return;
+    if(!allowmasterauth(m, priv))
+    {
+        authfailed(ci);
+        return;
+    }
     ci->cleanauth(ci->connectauth!=0);
     bool connecting = false;
-    if(ci->connectauth) { connected(ci); connecting = true; }
+    if(ci->connectauth)
+    {
+        if(z_allowauthconnect(priv) || (ci->xi.wlauth && !strcmp(ci->xi.wlauth, ci->authdesc)))
+        {
+            connected(ci);
+            connecting = true;
+        }
+        else
+        {
+            disconnect_client(ci->clientnum, ci->connectauth);
+            return;
+        }
+    }
     if(ci->authkickvictim >= 0)
     {
         if(setmaster(ci, true, "", ci->authname, ci->authdesc, priv, false, true, !connecting))
@@ -78,12 +107,20 @@ bool tryauth(clientinfo *ci, const char *user, const char *desc)
     }
     else
     {
+        bool tried = false;
         for(int m = findauthmaster(desc); m >= 0; m = findauthmaster(desc, m))
-            if(requestmasterf(m, "reqauth %u %s\n", ci->authreq, ci->authname)) { ci->authmaster = m; break; }
+        {
+            tried = true;
+            if(requestmasterf(m, "reqauth %u %s\n", ci->authreq, ci->authname))
+            {
+                ci->authmaster = m;
+                break;
+            }
+        }
         if(ci->authmaster < 0)
         {
             ci->cleanauth();
-            if(!ci->authdesc[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, "not connected to authentication server");
+            if(tried) sendf(ci->clientnum, 1, "ris", N_SERVMSG, "not connected to authentication server");
         }
     }
     if(ci->authreq) return true;
@@ -111,7 +148,19 @@ bool answerchallenge(clientinfo *ci, uint id, char *val, const char *desc)
             if(u)
             {
                 bool connecting = false;
-                if(ci->connectauth) { connected(ci); connecting = true; }
+                if(ci->connectauth)
+                {
+                    if(z_allowauthconnect(u->privilege) || (ci->xi.wlauth && !strcmp(ci->xi.wlauth, desc)))
+                    {
+                        connected(ci);
+                        connecting = true;
+                    }
+                    else
+                    {
+                        ci->cleanauth();
+                        return false;
+                    }
+                }
                 if(ci->authkickvictim >= 0)
                 {
                     if(setmaster(ci, true, "", ci->authname, ci->authdesc, u->privilege, false, true, !connecting))
@@ -124,18 +173,25 @@ bool answerchallenge(clientinfo *ci, uint id, char *val, const char *desc)
     }
     else if(!requestmasterf(om, "confauth %u %s\n", id, val))
     {
+        bool tried = false;
         ci->cleanauth(false);
         for(int m = findauthmaster(desc, om); m >= 0; m = findauthmaster(desc, m))
         {
+            tried = true;
             if(!ci->authreq) { if(!nextauthreq) nextauthreq = 1; ci->authreq = nextauthreq++; }
-            if(requestmasterf(m, "reqauth %u %s\n", ci->authreq, ci->authname)) { ci->authmaster = m; break; }
+            if(requestmasterf(m, "reqauth %u %s\n", ci->authreq, ci->authname))
+            {
+                ci->authmaster = m;
+                break;
+            }
         }
         if(ci->authmaster < 0)
         {
             ci->cleanauth();
-            if(!ci->authdesc[0]) sendf(ci->clientnum, 1, "ris", N_SERVMSG, "not connected to authentication server");
+            if(tried) sendf(ci->clientnum, 1, "ris", N_SERVMSG, "not connected to authentication server");
         }
     }
+    // return false = disconnect
     return ci->authreq || !ci->connectauth;
 }
 
@@ -161,23 +217,20 @@ void processmasterinput(int m, const char *cmd, int cmdlen, const char *args)
     if(sscanf(cmd, "failauth %u", &id) == 1)
         authfailed(m, id);
     else if(sscanf(cmd, "succauth %u", &id) == 1)
-        authsucceeded(m, id);
+        authsucceeded(m, id, masterauthpriv_get(m));
     else if(sscanf(cmd, "chalauth %u %255s", &id, val) == 2)
         authchallenged(m, id, val, getmasterauth(m));
     else if(!strncmp(cmd, "cleargbans", cmdlen))
         cleargbans(m);
     else if(sscanf(cmd, "addgban %100s", val) == 1)
-        addgban(m, val);
+        addban(m, val);
     else if(sscanf(cmd, "z_priv %100s", val) == 1)
     {
         switch(val[0])
         {
-            case '0': case 'n': case 'N': masterauthpriv_set(m, PRIV_NONE); break;
-            case '1': case 'c': case 'C': masterauthpriv_set(m, PRIV_MASTER); break;
-            case '2': case 'm': case 'M': default: masterauthpriv_set(m, PRIV_AUTH); break;
-            case '3': case 'a': case 'A': masterauthpriv_set(m, PRIV_ADMIN); break;
+            case 'a': case 'A': masterauthpriv_set(m, PRIV_ADMIN); break;
+            case 'm': case 'M': default: masterauthpriv_set(m, PRIV_AUTH); break;
+            case 'n': case 'N': masterauthpriv_set(m, PRIV_NONE); break;
         }
     }
 }
-
-#endif // Z_MS_GAMESERVER_OVERRIDE_H

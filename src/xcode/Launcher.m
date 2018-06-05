@@ -110,8 +110,6 @@
     
     // call back into C/C++ world
     if(dataPath) chdir([dataPath fileSystemRepresentation]);
-    setenv("SDL_SINGLEDISPLAY", "1", 1);
-    setenv("SDL_ENABLEAPPEVENTS", "1", 1); // makes Command-H, Command-M and Command-Q work at least when not in fullscreen
     SDL_main(argc, (char**)argv);
     // won't reach here as the C/C++ code calls fatal/exit
 }

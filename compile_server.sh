@@ -11,7 +11,7 @@ esac
 unset ostype
 
 makecmd='make'
-if type gmake > /dev/null; then
+if type gmake >/dev/null 2>/dev/null; then
 	makecmd='gmake'
 fi
 

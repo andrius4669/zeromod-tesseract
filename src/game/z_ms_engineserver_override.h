@@ -1,4 +1,6 @@
-#ifndef Z_MS_ENGINESERVER_OVERRIDE_H
+#ifdef Z_MS_ENGINESERVER_OVERRIDE_H
+#error "already z_ms_engineserver_override.h"
+#endif
 #define Z_MS_ENGINESERVER_OVERRIDE_H
 
 ENetAddress serveraddress = { ENET_HOST_ANY, ENET_PORT_ANY };
@@ -7,28 +9,32 @@ struct msinfo
 {
     string mastername;
     int masterport;
-    string masterauth;
     ENetSocket mastersock;
-    ENetAddress masteraddress;
     int lastupdatemaster, lastconnectmaster, masterconnecting, masterconnected;
+    // NOTE: masterconnected is also reused for tracking last registration input from masterserver, after it's been connected
     vector<char> masterout, masterin;
     int masteroutpos, masterinpos;
     bool allowupdatemaster;
     int masternum;
-    int *masterauthpriv;
+    string masterauth;
+    int masterauthpriv;
     bool masterauthpriv_allow;
+    char *networkident;
+    char *whitelistauth;
+    char *banmessage;
+    int minauthpriv, maxauthpriv;
+    int banmode;
 
     msinfo(): masterport(server::masterport()), mastersock(ENET_SOCKET_NULL),
         lastupdatemaster(0), lastconnectmaster(0), masterconnecting(0), masterconnected(0),
         masteroutpos(0), masterinpos(0), allowupdatemaster(true), masternum(-1),
-        masterauthpriv(NULL), masterauthpriv_allow(false)
+        masterauthpriv(-1), masterauthpriv_allow(false), networkident(NULL),
+        whitelistauth(NULL), banmessage(NULL), minauthpriv(0), maxauthpriv(3), banmode(1)
     {
         copystring(mastername, server::defaultmaster());
         masterauth[0] = '\0';
-        masteraddress.host = ENET_HOST_ANY;
-        masteraddress.port = ENET_PORT_ANY;
     }
-    ~msinfo() { disconnectmaster(); }
+    ~msinfo() { disconnectmaster(); delete[] networkident; delete[] whitelistauth; delete[] banmessage; }
 
     void disconnectmaster()
     {
@@ -43,22 +49,19 @@ struct msinfo
         masterin.setsize(0);
         masteroutpos = masterinpos = 0;
 
-        masteraddress.host = ENET_HOST_ANY;
-        masteraddress.port = ENET_PORT_ANY;
-
         lastupdatemaster = masterconnecting = masterconnected = 0;
-        DELETEP(masterauthpriv);
+        masterauthpriv = -1;
     }
 
     ENetSocket connectmaster(bool wait)
     {
+        // if disabled bail out
         if(!mastername[0]) return ENET_SOCKET_NULL;
-        if(masteraddress.host == ENET_HOST_ANY)
-        {
-            if(isdedicatedserver()) logoutf("looking up %s...", mastername);
-            masteraddress.port = masterport;
-            if(!resolverwait(mastername, &masteraddress)) return ENET_SOCKET_NULL;
-        }
+        // resolve everytime. we dont want to use old IP incase it changes after masterserver being unreachable for a while
+        ENetAddress masteraddress = { ENET_HOST_ANY, (enet_uint16)masterport };
+        if(isdedicatedserver()) logoutf("looking up %s...", mastername);
+        if(!resolverwait(mastername, &masteraddress)) return ENET_SOCKET_NULL;
+        // connect to it
         ENetSocket sock = enet_socket_create(ENET_SOCKET_TYPE_STREAM);
         if(sock == ENET_SOCKET_NULL)
         {
@@ -68,6 +71,7 @@ struct msinfo
         if(wait || serveraddress.host == ENET_HOST_ANY || !enet_socket_bind(sock, &serveraddress))
         {
             enet_socket_set_option(sock, ENET_SOCKOPT_NONBLOCK, 1);
+            enet_socket_set_option(sock, ENET_SOCKOPT_KEEPALIVE, 1);
             if(wait)
             {
                 if(!connectwithtimeout(sock, mastername, masteraddress)) return sock;
@@ -115,9 +119,15 @@ struct msinfo
             while(args < end && iscubespace(*args)) args++;
 
             if(!strncmp(input, "failreg", cmdlen))
+            {
+                masterconnected = totalmillis ? totalmillis : 1;
                 conoutf(CON_ERROR, "master server (%s) registration failed: %s", mastername, args);
+            }
             else if(!strncmp(input, "succreg", cmdlen))
+            {
+                masterconnected = totalmillis ? totalmillis : 1;
                 conoutf("master server (%s) registration succeeded", mastername);
+            }
             else server::processmasterinput(masternum, input, cmdlen, args);
 
             masterinpos = end - masterin.getbuf();
@@ -128,6 +138,11 @@ struct msinfo
         if(masterinpos >= masterin.length())
         {
             masterin.setsize(0);
+            masterinpos = 0;
+        }
+        else if(masterinpos >= 1024)
+        {
+            masterin.remove(0, masterinpos);
             masterinpos = 0;
         }
     }
@@ -153,6 +168,11 @@ struct msinfo
                 masterout.setsize(0);
                 masteroutpos = 0;
             }
+            else if(masteroutpos >= 1024) // keep things tidy
+            {
+                masterout.remove(0, masteroutpos);
+                masteroutpos = 0;
+            }
         }
         else disconnectmaster();
     }
@@ -171,13 +191,14 @@ struct msinfo
             masterin.advance(recv);
             processmasterinput();
         }
-        else disconnectmaster();
+        else if(recv >= -1) disconnectmaster();
     }
 
     void updatemasterserver()
     {
         extern int serverport;
         if(!masterconnected && lastconnectmaster && totalmillis-lastconnectmaster <= 5*60*1000) return;
+        if(masterconnected && lastupdatemaster && lastupdatemaster-masterconnected > 0 && totalmillis-lastupdatemaster >= 5*60*1000) disconnectmaster();
         if(mastername[0] && allowupdatemaster)
         {
             requestmasterf("regserv %d\n", serverport);
@@ -212,6 +233,7 @@ VARFN(updatemaster, allowupdatemaster, 0, 1, 1,
     if(!mss.inrange(currmss)) addms();
     mss[currmss].allowupdatemaster = allowupdatemaster;
 });
+
 SVARF(mastername, server::defaultmaster(),
 {
     if(!mss.inrange(currmss)) addms();
@@ -219,6 +241,7 @@ SVARF(mastername, server::defaultmaster(),
     mss[currmss].lastconnectmaster = 0;
     copystring(mss[currmss].mastername, mastername);
 });
+
 VARF(masterport, 1, server::masterport(), 0xFFFF,
 {
     if(!mss.inrange(currmss)) addms();
@@ -226,6 +249,7 @@ VARF(masterport, 1, server::masterport(), 0xFFFF,
     mss[currmss].lastconnectmaster = 0;
     mss[currmss].masterport = masterport;
 });
+
 SVARF(masterauth, "",
 {
     if(!mss.inrange(currmss)) addms();
@@ -273,10 +297,7 @@ const char *getmastername(int m)
     return mn;
 }
 
-const char *getmasterauth(int m)
-{
-    return mss.inrange(m) ? mss[m].masterauth : "";
-}
+const char *getmasterauth(int m) { return mss.inrange(m) ? mss[m].masterauth : ""; }
 
 int nummss() { return mss.length(); }
 
@@ -286,21 +307,71 @@ ICOMMAND(masterauthpriv, "i", (int *i),
     mss[currmss].masterauthpriv_allow = *i!=0;
 });
 
+ICOMMAND(masterminauthpriv, "i", (int *i),
+{
+    if(!mss.inrange(currmss)) addms();
+    mss[currmss].minauthpriv = clamp(*i, 0, 3);
+});
+
+ICOMMAND(mastermaxauthpriv, "i", (int *i),
+{
+    if(!mss.inrange(currmss)) addms();
+    mss[currmss].maxauthpriv = clamp(*i, 0, 3);
+});
+
 void masterauthpriv_set(int m, int priv)
 {
     if(!mss.inrange(m)) return;
-    DELETEP(mss[m].masterauthpriv);
-    mss[m].masterauthpriv = new int(priv);
+    if(mss[m].masterauthpriv_allow) mss[m].masterauthpriv = clamp(priv, 0, mss[m].maxauthpriv);
 }
 
-void masterauthpriv_reset(int m)
+int masterauthpriv_get(int m)
 {
-    if(mss.inrange(m)) DELETEP(mss[m].masterauthpriv);
+    if(!mss.inrange(m)) return 2;
+    int authpriv = mss[m].masterauthpriv;
+    mss[m].masterauthpriv = -1;
+    return authpriv >= 0 ? authpriv : min(mss[m].maxauthpriv, 2);
 }
 
-const int *masterauthpriv_get(int m)
+bool allowmasterauth(int m, int priv)
 {
-    return mss.inrange(m) && mss[m].masterauthpriv_allow ? mss[m].masterauthpriv : NULL;
+    if(!mss.inrange(m)) return false;
+    return priv >= mss[m].minauthpriv && priv <= mss[m].maxauthpriv;
 }
 
-#endif // Z_MS_ENGINESERVER_OVERRIDE_H
+ICOMMAND(masterbanwarn, "s", (char *s),
+{
+    if(!mss.inrange(currmss)) addms();
+    delete[] mss[currmss].networkident;
+    mss[currmss].networkident = *s ? newstring(s) : NULL;
+});
+
+ICOMMAND(masterwhitelistauth, "s", (char *s),
+{
+    if(!mss.inrange(currmss)) addms();
+    delete[] mss[currmss].whitelistauth;
+    mss[currmss].whitelistauth = *s ? newstring(s) : NULL;
+});
+
+ICOMMAND(masterbanmessage, "s", (char *s),
+{
+    if(!mss.inrange(currmss)) addms();
+    delete[] mss[currmss].banmessage;
+    mss[currmss].banmessage = *s ? newstring(s) : NULL;
+});
+
+ICOMMAND(masterbanmode, "i", (int *i),    // -1 - whitelist, 0 - ignore, 1 (default) - blacklist, 2 - specban
+{
+    if(!mss.inrange(currmss)) addms();
+    mss[currmss].banmode = clamp(*i, -1, 2);
+});
+
+bool getmasterbaninfo(int m, const char *&ident, int &disc, const char *&wlauth, const char *&banmsg)
+{
+    if(!mss.inrange(m)) return false;
+    ident = mss[m].networkident;
+    disc = mss[m].banmode;
+    wlauth = mss[m].whitelistauth;
+    banmsg = mss[m].banmessage;
+    return true;
+}

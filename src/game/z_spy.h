@@ -1,8 +1,15 @@
-#ifndef Z_SPY_H
+#ifdef Z_SPY_H
+#error "already z_spy.h"
+#endif
 #define Z_SPY_H
 
-#include "z_servcmd.h"
-#include "z_geoipserver.h"
+#ifndef Z_SERVCMD_H
+#error "want z_servcmd.h"
+#endif
+#ifndef Z_GEOIPSERVER_H
+#error "want z_geoipserver.h"
+#endif
+
 
 void z_setspy(clientinfo *ci, bool val)
 {
@@ -24,13 +31,13 @@ void z_setspy(clientinfo *ci, bool val)
             for(int i = demorecord ? -1 : 0; i < clients.length(); i++)
             {
                 clientinfo *cx = i >= 0 ? clients[i] : NULL;
-                if(!ci->canseemypriv(cx) || (cx && (cx->clientnum == ci->clientnum || cx->state.aitype != AI_NONE))) continue;
+                if(!z_canseemypriv(ci, cx) || (cx && (cx->clientnum == ci->clientnum || cx->state.aitype != AI_NONE))) continue;
                 packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
                 putint(p, N_SERVMSG);
                 sendstring(msg, p);
                 putint(p, N_CURRENTMASTER);
                 putint(p, mastermode);
-                loopvj(clients) if(clients[j]->privilege >= PRIV_MASTER && clients[j]->canseemypriv(cx))
+                loopvj(clients) if(clients[j]->privilege >= PRIV_MASTER && z_canseemypriv(clients[j], cx))
                 {
                     putint(p, clients[j]->clientnum);
                     putint(p, clients[j]->privilege);
@@ -89,13 +96,13 @@ void z_setspy(clientinfo *ci, bool val)
             for(int i = demorecord ? -1 : 0; i < clients.length(); i++)
             {
                 clientinfo *cx = i >= 0 ? clients[i] : NULL;
-                if(!ci->canseemypriv(cx) || (cx && (cx->clientnum == ci->clientnum || cx->state.aitype != AI_NONE))) continue;
+                if(!z_canseemypriv(ci, cx) || (cx && (cx->clientnum == ci->clientnum || cx->state.aitype != AI_NONE))) continue;
                 packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
                 putint(p, N_SERVMSG);
                 sendstring(msg, p);
                 putint(p, N_CURRENTMASTER);
                 putint(p, mastermode);
-                loopvj(clients) if(clients[j]->privilege >= PRIV_MASTER && clients[j]->canseemypriv(cx))
+                loopvj(clients) if(clients[j]->privilege >= PRIV_MASTER && z_canseemypriv(clients[j], cx))
                 {
                     putint(p, clients[j]->clientnum);
                     putint(p, clients[j]->privilege);
@@ -117,7 +124,7 @@ void z_servcmd_spy(int argc, char **argv, int sender)
     if(!ci) return;
     z_setspy(ci, !ci->spy);
 }
-SCOMMANDNA(spy, PRIV_ADMIN, z_servcmd_spy, 1);
+SCOMMANDA(spy, PRIV_ADMIN, z_servcmd_spy, 1);
 
 void z_servcmd_listspy(int argc, char **argv, int sender)
 {
@@ -135,6 +142,4 @@ void z_servcmd_listspy(int argc, char **argv, int sender)
         sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("spies list: %s", spybuf.getbuf()));
     }
 }
-SCOMMANDNA(listspy, PRIV_ADMIN, z_servcmd_listspy, 1);
-
-#endif // Z_SPY_H
+SCOMMANDA(listspy, PRIV_ADMIN, z_servcmd_listspy, 1);

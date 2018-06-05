@@ -1,7 +1,11 @@
-#ifndef Z_MSGFILTER_H
+#ifdef Z_MSGFILTER_H
+#error "already z_msgfilter.h"
+#endif
 #define Z_MSGFILTER_H
 
-#include "z_rename.h"
+#ifndef Z_RENAME_H
+#error "want z_rename.h"
+#endif
 
 // message checking for editmute and flood protection
 bool allowmsg(clientinfo *ci, clientinfo *cq, int type)
@@ -19,11 +23,11 @@ bool allowmsg(clientinfo *ci, clientinfo *cq, int type)
 
         case N_TEXT:
         case N_SAYTEAM:
-            if(cq && cq->chatmute)
+            if(cq && z_checkchatmute(ci, cq))
             {
-                if(!cq->lastchat || totalmillis-cq->lastchat>=2000)
+                if(!cq->xi.lastchat || totalmillis-cq->xi.lastchat>=1000)
                 {
-                    cq->lastchat = totalmillis ? totalmillis : 1;
+                    cq->xi.lastchat = totalmillis ? totalmillis : 1;
                     if(cq->state.aitype == AI_NONE) sendf(cq->clientnum, 1, "ris", N_SERVMSG, "your text messages are muted");
                 }
                 return false;
@@ -36,14 +40,19 @@ bool allowmsg(clientinfo *ci, clientinfo *cq, int type)
         case N_COPY: case N_CLIPBOARD: case N_PASTE:
         case N_REMIP: case N_CALCLIGHT: case N_NEWMAP:
         case N_UNDO: case N_REDO:
-            if(smode==&racemode)
+            if(smode==&racemode && !racemode_allowedit)
             {
                 if(type == N_COPY || type == N_CLIPBOARD) ci->cleanclipboard();
-                if(type == N_REMIP || type == N_CALCLIGHT) return false;  /* drop messages, but don't disqualify client for them */
+                if(type == N_REMIP || type == N_CALCLIGHT) return false;    /* drop messages, but don't disqualify client for them */
                 racemode.racecheat(ci, 2);
                 return false;
             }
-            if(ci->editmute)
+            if(z_shouldblockgameplay(ci))
+            {
+                if(type == N_COPY || type == N_CLIPBOARD) ci->cleanclipboard();
+                return false;   // just drop without warning
+            }
+            if(ci->xi.editmute)
             {
                 if(type == N_COPY || type == N_CLIPBOARD) ci->cleanclipboard();
                 const char *msg;
@@ -53,9 +62,9 @@ bool allowmsg(clientinfo *ci, clientinfo *cq, int type)
                     case N_CALCLIGHT: msg = "your calclight message was muted"; break;
                     case N_NEWMAP: msg = "your newmap message was muted"; break;
                     default:
-                        if(!ci->lastedit || totalmillis-ci->lastedit>=10000)
+                        if(!ci->xi.lastedit || totalmillis-ci->xi.lastedit>=10000)
                         {
-                            ci->lastedit = totalmillis ? totalmillis : 1;
+                            ci->xi.lastedit = totalmillis ? totalmillis : 1;
                             msg = "your map editing message was muted";
                         }
                         else msg = NULL;
@@ -67,15 +76,24 @@ bool allowmsg(clientinfo *ci, clientinfo *cq, int type)
             return true;
 
         case N_SWITCHNAME:
-            if(ci->namemute)
+            if(ci->xi.namemute)
             {
                 z_rename(ci, ci->name, false);
                 return false;
             }
             return true;
 
+        case N_TAUNT:
+            return cq && cq->state.state==CS_ALIVE && !z_shouldblockgameplay(cq);
+
         default: return true;
     }
 }
 
-#endif // Z_MSGFILTER_H
+static inline bool z_allowsound(clientinfo *ci, clientinfo *cq, int sound)
+{
+    // allow some fun. but only for hearable sounds, to prevent unknown sound messages spam
+    return cq && (cq->state.state==CS_ALIVE || cq->state.state==CS_EDITING)
+        && !z_shouldblockgameplay(cq)
+        && sound >= S_JUMP && sound <= S_FLAGFAIL;
+}

@@ -33,6 +33,8 @@ typedef unsigned long long int ullong;
 #define UNUSED
 #endif
 
+void *operator new(size_t, bool);
+void *operator new[](size_t, bool);
 inline void *operator new(size_t, void *p) { return p; }
 inline void *operator new[](size_t, void *p) { return p; }
 inline void operator delete(void *, void *) {}
@@ -217,6 +219,8 @@ template<size_t N> inline void concformatstring(char (&d)[N], const char *fmt, .
     vformatstring(d + len, fmt, v, int(N) - len);
     va_end(v);
 }
+
+extern char *tempformatstring(const char *fmt, ...) PRINTFARGS(1, 2);
 
 extern char *tempformatstring(const char *fmt, ...) PRINTFARGS(1, 2);
 
@@ -712,7 +716,7 @@ template <class T> struct vector
 
     databuf<T> reserve(int sz)
     {
-        if(ulen+sz > alen) growbuf(ulen+sz);
+        if(alen-ulen < sz) growbuf(ulen+sz);
         return databuf<T>(&buf[ulen], sz);
     }
 
@@ -808,7 +812,7 @@ template <class T> struct vector
 
     T *insert(int i, const T *e, int n)
     {
-        if(ulen+n>alen) growbuf(ulen+n);
+        if(alen-ulen < n) growbuf(ulen+n);
         loopj(n) add(T());
         for(int p = ulen-1; p>=i+n; p--) buf[p] = buf[p-n];
         loopj(n) buf[i+j] = e[j];
@@ -986,13 +990,6 @@ template<class H, class E, class K, class T> struct hashbase
         HTFIND( , insert(h, key) = elem);
     }
 
-    template<class V>
-    T &add(const V &elem)
-    {
-        const K &key = H::getkey(elem);
-        HTFIND( , insert(h, key) = elem);
-    }
-
     template<class U>
     T &operator[](const U &key)
     {
@@ -1085,6 +1082,12 @@ template<class T> struct hashset : hashbase<hashset<T>, T, T, T>
     static inline const T &getkey(const T &elem) { return elem; }
     static inline T &getdata(T &elem) { return elem; }
     template<class K> static inline void setkey(T &elem, const K &key) {}
+
+    template<class V>
+    T &add(const V &elem)
+    {
+        return basetype::access(elem, elem);
+    }
 };
 
 template<class T> struct hashnameset : hashbase<hashnameset<T>, T, const char *, T>
@@ -1097,6 +1100,12 @@ template<class T> struct hashnameset : hashbase<hashnameset<T>, T, const char *,
     template<class U> static inline const char *getkey(U *elem) { return elem->name; }
     static inline T &getdata(T &elem) { return elem; }
     template<class K> static inline void setkey(T &elem, const K &key) {}
+
+    template<class V>
+    T &add(const V &elem)
+    {
+        return basetype::access(getkey(elem), elem);
+    }
 };
 
 template<class K, class T> struct hashtableentry
@@ -1215,6 +1224,14 @@ template<class T> inline void endiansame(T *buf, size_t len) {}
 #define lilswap endianswap
 #define bigswap endiansame
 #endif
+#elif defined(__BYTE_ORDER__)
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define lilswap endiansame
+#define bigswap endianswap
+#else
+#define lilswap endianswap
+#define bigswap endiansame 
+#endif
 #else
 template<class T> inline T lilswap(T n) { return islittleendian() ? n : endianswap(n); }
 template<class T> inline void lilswap(T *buf, size_t len) { if(!islittleendian()) endianswap(buf, len); }
@@ -1307,6 +1324,7 @@ static inline int iscubealpha(uchar c) { return cubectype[c]&CT_ALPHA; }
 static inline int iscubealnum(uchar c) { return cubectype[c]&(CT_ALPHA|CT_DIGIT); }
 static inline int iscubelower(uchar c) { return cubectype[c]&CT_LOWER; }
 static inline int iscubeupper(uchar c) { return cubectype[c]&CT_UPPER; }
+static inline int iscubepunct(uchar c) { return cubectype[c] == CT_PRINT; }
 static inline int cube2uni(uchar c)
 {
     extern const int cube2unichars[256];
@@ -1330,6 +1348,8 @@ static inline uchar cubeupper(uchar c)
 }
 extern size_t decodeutf8(uchar *dst, size_t dstlen, const uchar *src, size_t srclen, size_t *carry = NULL);
 extern size_t encodeutf8(uchar *dstbuf, size_t dstlen, const uchar *srcbuf, size_t srclen, size_t *carry = NULL);
+
+extern string homedir;
 
 extern char *makerelpath(const char *dir, const char *file, const char *prefix = NULL, const char *cmd = NULL);
 extern char *path(char *s);

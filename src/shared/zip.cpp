@@ -55,7 +55,7 @@ struct ziparchive
 {
     char *name;
     FILE *data;
-    hashtable<const char *, zipfile> files;
+    hashnameset<zipfile> files;
     int openfiles;
     zipstream *owner;
 
@@ -115,8 +115,8 @@ VAR(dbgzip, 0, 0, 1);
 
 static bool readzipdirectory(const char *archname, FILE *f, int entries, int offset, uint size, vector<zipfile> &files)
 {
-    uchar *buf = new uchar[size], *src = buf;
-    if(fseek(f, offset, SEEK_SET) < 0 || fread(buf, 1, size, f) != size) { delete[] buf; return false; }
+    uchar *buf = new (false) uchar[size], *src = buf;
+    if(!buf || fseek(f, offset, SEEK_SET) < 0 || fread(buf, 1, size, f) != size) { delete[] buf; return false; }
     loopi(entries)
     {
         if(src + ZIP_FILE_SIZE > &buf[size]) break;
@@ -447,6 +447,7 @@ struct zipstream : stream
             zfile.next_in += zfile.avail_in;
             zfile.avail_in = 0;
             zfile.total_in = info->compressedsize;
+            zfile.total_out = info->size;
             arch->owner = NULL;
             ended = false;
             return true;

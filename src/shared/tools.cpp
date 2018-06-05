@@ -20,6 +20,37 @@ void operator delete(void *p) { if(p) free(p); }
 
 void operator delete[](void *p) { if(p) free(p); }
 
+void *operator new(size_t size, bool err)
+{
+    void *p = malloc(size);
+    if(!p && err) abort();
+    return p;
+}
+
+void *operator new[](size_t size, bool err)
+{
+    void *p = malloc(size);
+    if(!p && err) abort();
+    return p;
+}
+
+////////////////////////// strings ////////////////////////////////////////
+
+static string tmpstr[4];
+static int tmpidx = 0;
+
+char *tempformatstring(const char *fmt, ...)
+{
+    tmpidx = (tmpidx+1)%4;
+
+    va_list v;
+    va_start(v, fmt);
+    vformatstring(tmpstr[tmpidx], fmt, v);
+    va_end(v);
+
+    return tmpstr[tmpidx];
+}
+
 ////////////////////////// strings ////////////////////////////////////////
 
 static string tmpstr[4];
@@ -134,7 +165,7 @@ int getuint(ucharbuf &p)
         n += (p.get() << 7) - 0x80;
         if(n & (1<<14)) n += (p.get() << 14) - (1<<14);
         if(n & (1<<21)) n += (p.get() << 21) - (1<<21);
-        if(n & (1<<28)) n |= -1<<28;
+        if(n & (1<<28)) n |= ~0U<<28;
     }
     return n;
 }

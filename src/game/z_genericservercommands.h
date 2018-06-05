@@ -1,7 +1,18 @@
-#ifndef Z_GENERICSERVERCOMMANDS_H
+#ifdef Z_GENERICSERVERCOMMANDS_H
+#error "already z_genericservercommands.h"
+#endif
 #define Z_GENERICSERVERCOMMANDS_H 1
 
-#include "z_servcmd.h"
+#ifndef Z_SERVCMD_H
+#error "want z_servcmd.h"
+#endif
+#ifndef Z_FORMAT_H
+#error "want z_format.h"
+#endif
+#ifndef Z_INVPRIV_H
+#error "want z_invpriv.h"
+#endif
+
 
 static char z_privcolor(int priv)
 {
@@ -26,7 +37,7 @@ static void z_servcmd_commands(int argc, char **argv, int sender)
         else { cbufs[j].add(','); cbufs[j].add(' '); }
         cbufs[j].put(c.name, strlen(c.name));
     }
-    sendf(sender, 1, "ris", N_SERVMSG, "\f2avaiable server commands:");
+    sendf(sender, 1, "ris", N_SERVMSG, "\f2available server commands:");
     loopi(sizeof(cbufs)/sizeof(cbufs[0]))
     {
         if(cbufs[i].empty()) continue;
@@ -37,101 +48,95 @@ static void z_servcmd_commands(int argc, char **argv, int sender)
 SCOMMANDA(commands, PRIV_NONE, z_servcmd_commands, 1);
 SCOMMANDAH(help, PRIV_NONE, z_servcmd_commands, 1);
 
-static const struct z_timedivinfo { const char *name; int timediv; } z_timedivinfos[] =
-{
-    // month is inaccurate 
-    { "week", 60*60*24*7 },
-    { "day", 60*60*24 },
-    { "hour", 60*60 },
-    { "minute", 60 },
-    { "second", 1 }
-};
-
 void z_servcmd_info(int argc, char **argv, int sender)
 {
     vector<char> uptimebuf;
-    uint secs = totalsecs;
-    loopi(sizeof(z_timedivinfos)/sizeof(z_timedivinfos[0]))
-    {
-        uint t = secs / z_timedivinfos[i].timediv;
-        if(!t) continue;
-        secs %= z_timedivinfos[i].timediv;
-        if(uptimebuf.length()) uptimebuf.add(' ');
-        const char *timestr = tempformatstring("%u", t);
-        uptimebuf.put(timestr, strlen(timestr));
-        uptimebuf.add(' ');
-        uptimebuf.put(z_timedivinfos[i].name, strlen(z_timedivinfos[i].name));
-        if(t > 1) uptimebuf.add('s');
-        if(!secs) break;
-    }
+    z_formatsecs(uptimebuf, totalsecs);
     uptimebuf.add('\0');
     sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("server uptime: %s", uptimebuf.getbuf()));
 }
-SCOMMANDA(info, PRIV_NONE, z_servcmd_info, 1);
+SCOMMANDAH(info, PRIV_NONE, z_servcmd_info, 1);
+SCOMMANDA(uptime, PRIV_NONE, z_servcmd_info, 1);
 
-void z_servcmd_stats(int argc, char **argv, int sender)
+void z_servcmd_ignore(int argc, char **argv, int sender)
 {
-    int cn, i;
-    clientinfo *ci = NULL, *senderci = getinfo(sender);
-    vector<clientinfo *> cis;
-    for(i = 1; i < argc; i++)
-    {
-        if(!z_parseclient_verify(argv[i], &cn, true, true, senderci->local || senderci->privilege>=PRIV_ADMIN))
-        {
-            sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[i]));
-            return;
-        }
-        if(cn < 0)
-        {
-            cis.shrink(0);
-            loopvj(clients) if(!clients[j]->spy || !senderci || senderci->local || senderci->privilege>=PRIV_ADMIN) cis.add(clients[j]);
-            break;
-        }
-        ci = getinfo(cn);
-        if(cis.find(ci)<0) cis.add(ci);
-    }
+    if(argc <= 1) { z_servcmd_pleasespecifyclient(sender); return; }
 
-    if(cis.empty() && senderci) cis.add(senderci);
+    clientinfo *sci = getinfo(sender);
+    if(!sci) return;
 
-    for(i = 0; i < cis.length(); i++)
+    bool val = strcasecmp(argv[0], "unignore")!=0;
+
+    loopi(argc-1)
     {
-        ci = cis[i];
-        string buf;
-        if(m_ctf) formatstring(buf,
-            "\f6stats: \f7%s: \f2frags: \f7%d\f2, flags: \f7%d\f2, deaths: \f7%d\f2, teamkills: \f7%d\f2, accuracy(%%): \f7%d\f2, kpd: \f7%.2f",
-            colorname(ci), ci->state.frags, ci->state.flags, ci->state.deaths, ci->state.teamkills,
-            ci->state.damage*100/max(ci->state.shotdamage,1), float(ci->state.frags)/max(ci->state.deaths,1));
-        else formatstring(buf,
-            "\f6stats: \f7%s: \f2frags: \f7%d\f2, deaths: \f7%d\f2, teamkills: \f7%d\f2, accuracy(%%): \f7%d\f2, kpd: \f7%.2f",
-            colorname(ci), ci->state.frags, ci->state.deaths, ci->state.teamkills,
-            ci->state.damage*100/max(ci->state.shotdamage,1), float(ci->state.frags)/max(ci->state.deaths,1));
-        sendf(sender, 1, "ris", N_SERVMSG, buf);
+        int cn;
+        if(!z_parseclient_verify(argv[i+1], cn, false, true))
+        {
+            z_servcmd_unknownclient(argv[i+1], sender);
+            continue;
+        }
+        if(val)
+        {
+            sci->xi.ignores.addunique((uchar)cn);
+            sci->xi.allows.removeobj((uchar)cn);
+        }
+        else sci->xi.ignores.removeobj((uchar)cn);
+        sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("%s server messages from %s", val ? "ignoring" : "unignoring", colorname(getinfo(cn))));
     }
 }
-SCOMMAND(stats, PRIV_NONE, z_servcmd_stats);
+SCOMMAND(ignore, PRIV_NONE, z_servcmd_ignore);
+SCOMMAND(unignore, PRIV_NONE, z_servcmd_ignore);
 
 VAR(servcmd_pm_comfirmation, 0, 1, 1);
 void z_servcmd_pm(int argc, char **argv, int sender)
 {
-    if(argc <= 2) { sendf(sender, 1, "ris", N_SERVMSG, "please specify client and message"); return; }
+    if(argc <= 1) { z_servcmd_pleasespecifyclient(sender); return; }
+    if(argc <= 2) { z_servcmd_pleasespecifymessage(sender); return; }
     int cn;
-    clientinfo *ci;
-    if(!z_parseclient_verify(argv[1], &cn, false, true, true))
+    clientinfo *sci, *ci;
+
+    sci = getinfo(sender);
+    if(!sci) return;
+    if(z_checkchatmute(sci))
     {
-        sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[1]));
+        sendf(sender, 1, "ris", N_SERVMSG, "your pms are muted");
         return;
     }
-    ci = getinfo(cn);
-    if(ci->state.aitype!=AI_NONE) { sendf(sender, 1, "ris", N_SERVMSG, "you can not send private message to bot"); return; }
-    ci = getinfo(sender);
-    sendf(cn, 1, "ris", N_SERVMSG, tempformatstring("\f6pm: \f7%s \f5(%d)\f7: \f0%s", ci->name, ci->clientnum, argv[2]));
-    if(servcmd_pm_comfirmation)
+
+    ci = z_parseclient_return(argv[1], false, true);
+    if(!ci)
     {
-        ci = getinfo(cn);
-        sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("your private message successfully sent to %s \f5(%d)", ci->name, ci->clientnum));
+        z_servcmd_unknownclient(argv[1], sender);
+        return;
+    }
+    cn = ci->clientnum;
+
+    bool foundallows = ci->xi.allows.find((uchar)sender) >= 0;
+    if(!foundallows && ci->spy && sci->privilege < PRIV_ADMIN)
+    {
+        z_servcmd_unknownclient(argv[1], sender);
+        return;
+    }
+
+    sci->xi.allows.addunique((uchar)cn);
+
+    if(ci->xi.ignores.find((uchar)sender) >= 0)
+    {
+        sendf(sender, 1, "ris", N_SERVMSG, "your pms are ignored");
+        return;
+    }
+
+    if(!foundallows) ci->xi.allows.add((uchar)sender);
+
+    sendf(cn, 1, "ris", N_SERVMSG, tempformatstring("\f6pm: \f7%s \f5(%d)\f7: \f0%s", sci->name, sci->clientnum, argv[2]));
+
+    if(servcmd_pm_comfirmation && strcasecmp(argv[0], "qpm") != 0)
+    {
+        sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("your pm was successfully sent to %s \f5(%d)", ci->name, ci->clientnum));
     }
 }
 SCOMMANDA(pm, PRIV_NONE, z_servcmd_pm, 2);
+SCOMMANDA(qpm, PRIV_NONE, z_servcmd_pm, 2);
 
 void z_servcmd_interm(int argc, char **argv, int sender)
 {
@@ -142,25 +147,33 @@ SCOMMANDA(intermission, PRIV_MASTER, z_servcmd_interm, 1);
 
 void z_servcmd_wall(int argc, char **argv, int sender)
 {
-    if(argc <= 1) { sendf(sender, 1, "ris", N_SERVMSG, "please specify message"); return; }
+    if(argc <= 1) { z_servcmd_pleasespecifymessage(sender); return; }
     sendservmsg(argv[1]);
 }
 SCOMMANDA(wall, PRIV_ADMIN, z_servcmd_wall, 1);
 
+void z_servcmd_achat(int argc, char **argv, int sender)
+{
+    if(argc <= 1) { z_servcmd_pleasespecifymessage(sender); return; }
+    clientinfo *ci = getinfo(sender);
+    z_servcmdinfo *c = z_servcmd_find(argv[0]);
+    int priv = c ? c->privilege : PRIV_ADMIN;
+    loopv(clients) if(clients[i]->state.aitype==AI_NONE && (clients[i]->local || clients[i]->privilege >= priv))
+    {
+        sendf(clients[i]->clientnum, 1, "ris", N_SERVMSG, tempformatstring("\f6achat: \f7%s: \f0%s", colorname(ci), argv[1]));
+    }
+}
+SCOMMANDA(achat, PRIV_ADMIN, z_servcmd_achat, 1);
+
 void z_servcmd_reqauth(int argc, char **argv, int sender)
 {
-    if(argc < 2)
-    {
-        if(!serverauth[0]) sendf(sender, 1, "ris", N_SERVMSG, "please specify client and authdesc");
-        else sendf(sender, 1, "ris", N_SERVMSG, "please specify client");
-        return;
-    }
-    if(argc < 3 && !serverauth[0]) { sendf(sender, 1, "ris", N_SERVMSG, "please specify authdesc"); return; }
+    if(argc <= 1) { z_servcmd_pleasespecifyclient(sender); return; }
+    if(argc <= 2 && !*serverauth) { sendf(sender, 1, "ris", N_SERVMSG, "please specify authdesc"); return; }
 
     int cn;
-    if(!z_parseclient_verify(argv[1], &cn, true, false, true))
+    if(!z_parseclient_verify(argv[1], cn, true, false, true))
     {
-        sendf(sender, 1, "ris", N_SERVMSG, tempformatstring("unknown client: %s", argv[1]));
+        z_servcmd_unknownclient(argv[1], sender);
         return;
     }
 
@@ -171,14 +184,8 @@ void z_servcmd_reqauth(int argc, char **argv, int sender)
 }
 SCOMMANDA(reqauth, PRIV_ADMIN, z_servcmd_reqauth, 2);
 
-#include "z_mutes.h"
-
-#include "z_loadmap.h"
-#include "z_savemap.h"
-
-#include "z_rename.h"
-#include "z_spy.h"
-#include "z_mapsucks.h"
-#include "z_slay.h"
-
-#endif //Z_GENERICSERVERCOMMANDS_H
+static void z_quitwhenempty_trigger(int type)
+{
+    if(quitwhenempty) quitserver = true;
+}
+Z_TRIGGER(z_quitwhenempty_trigger, Z_TRIGGER_NOCLIENTS);

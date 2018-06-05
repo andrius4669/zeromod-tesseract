@@ -29,12 +29,13 @@
     B:C:default: 0 command EXT_ACK EXT_VERSION EXT_ERROR
 */
 
-    VAR(extinfo_enable, 0, 1, 1);   // enable extinfo functionality
-    VAR(extinfo_showip, 0, 1, 2);   // show ips of clients
-    VAR(extinfo_showname, 0, 1, 1); // show names of clients
-    VAR(extinfo_showpriv, 0, 1, 2); // show privileges of clients
-    VAR(extinfo_showspy, 0, 0, 1);  // show spy clients
-    static bool z_showip;
+    VAR(extinfoip, 0, 0, 1);
+
+    VAR(extinfo_enable, 0, 1, 1);           // enable extinfo functionality
+    VAR(extinfo_showname, 0, 1, 1);         // show names of clients
+    VAR(extinfo_showpriv, 0, 1, 2);         // show privileges of clients
+    VAR(extinfo_showspy, 0, 0, 1);          // show spy clients
+    VAR(extinfo_firewall, 0, 1, 1);         // only show info if client could see it by joining
 
     void extinfoplayer(ucharbuf &p, clientinfo *ci)
     {
@@ -45,16 +46,16 @@
         sendstring(extinfo_showname ? ci->name : "", q);
         sendstring(teamname(m_teammode ? ci->team : 0), q);
         putint(q, ci->state.frags);
-        putint(q, ci->state.flags);
+        putint(q, m_ctf ? ci->state.flags : 0);
         putint(q, ci->state.deaths);
         putint(q, ci->state.teamkills);
         putint(q, ci->state.damage*100/max(ci->state.shotdamage,1));
         putint(q, ci->state.health);
         putint(q, 0);
         putint(q, ci->state.gunselect);
-        putint(q, (extinfo_showpriv && (extinfo_showpriv > 1 || ci->canseemypriv(NULL))) ? ci->privilege : PRIV_NONE);
+        putint(q, (extinfo_showpriv && (extinfo_showpriv > 1 || z_canseemypriv(ci, NULL))) ? ci->privilege : PRIV_NONE);
         putint(q, ci->state.state);
-        uint ip = z_showip ? getclientip(ci->clientnum) : 0;
+        uint ip = extinfoip ? getclientip(ci->clientnum) : 0;
         q.put((uchar*)&ip, 3);
         sendserverinforeply(q);
     }
@@ -72,7 +73,7 @@
         putint(p, m_teammode ? 0 : 1);
         putint(p, gamemode);
         putint(p, max((gamelimit - gamemillis)/1000, 0));
-        if(!m_teammode) return;
+        if(!m_teammode || (extinfo_firewall && !ipinfoallowed(getserverinfoip()))) return;
 
         vector<teamscore> scores;
         if(smode && smode->hidefrags()) smode->getteamscores(scores);
@@ -109,11 +110,15 @@
             {
                 int cn = getint(req); //a special player, -1 for all
 
+                bool z_allowed = !extinfo_firewall || ipinfoallowed(getserverinfoip());
+
                 clientinfo *ci = NULL;
                 if(cn >= 0)
                 {
-                    loopv(clients) if(clients[i]->clientnum == cn) { ci = clients[i]; break; }
-                    if(!ci || (!extinfo_showspy && ci->spy))
+                    if(!z_allowed ||
+                        !(ci = getinfo(cn)) ||
+                        !ci->connected ||
+                        (ci->spy && !extinfo_showspy))
                     {
                         putint(p, EXT_ERROR); //client requested by id was not found
                         sendserverinforeply(p);
@@ -126,23 +131,25 @@
                 ucharbuf q = p; //remember buffer position
                 putint(q, EXT_PLAYERSTATS_RESP_IDS); //send player ids following
                 if(ci) putint(q, ci->clientnum);
-                else loopv(clients) if(extinfo_showspy || !clients[i]->spy) putint(q, clients[i]->clientnum);
-                sendserverinforeply(q);
-
-                if(extinfo_showip < 2) z_showip = extinfo_showip!=0;
-                else
+                else if(z_allowed) loopv(clients)
                 {
-                    uint rip = getserverinfoip();
-                    z_showip = false;
-                    loopv(clients) if(clients[i]->state.aitype==AI_NONE && !clients[i]->local && getclientip(clients[i]->clientnum) == rip)
+                    if((clients[i]->state.aitype == AI_NONE || clients[i]->state.state != CS_SPECTATOR) &&
+                        (!clients[i]->spy || extinfo_showspy))
                     {
-                        z_showip = true;
-                        break;
+                        putint(q, clients[i]->clientnum);
                     }
                 }
+                sendserverinforeply(q);
 
                 if(ci) extinfoplayer(p, ci);
-                else loopv(clients) if(extinfo_showspy || !clients[i]->spy) extinfoplayer(p, clients[i]);
+                else if(z_allowed) loopv(clients)
+                {
+                    if((clients[i]->state.aitype == AI_NONE || clients[i]->state.state != CS_SPECTATOR) &&
+                        (!clients[i]->spy || extinfo_showspy))
+                    {
+                        extinfoplayer(p, clients[i]);
+                    }
+                }
                 return;
             }
 
