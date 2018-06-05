@@ -172,43 +172,46 @@ ICOMMAND(s_delai, "", (), intret(aiman::deleteai() ? 1 : 0));
 
 ICOMMAND(s_setteam, "isi", (int *cn, char *newteam, int *mode),
 {
-    string team;
-    filtertext(team, newteam, false, false, MAXTEAMLEN);
+    int tnum = teamnumber(newteam);
     clientinfo *ci = getinfo(*cn);
-    if(!m_teammode || !team[0] || !ci || !ci->connected || !strcmp(ci->team, team) || ci->spy) return;
-    if((!smode || smode->canchangeteam(ci, ci->team, team)) && addteaminfo(team))
+    if(!m_teammode || !tnum || !ci || !ci->connected || ci->team == tnum) return;
+    if((!smode || smode->canchangeteam(ci, ci->team, tnum)))
     {
         if(ci->state.state==CS_ALIVE) suicide(ci);
-        copystring(ci->team, team, MAXTEAMLEN+1);
+        ci->team = tnum;
     }
     aiman::changeteam(ci);
-    sendf(-1, 1, "riisi", N_SETTEAM, ci->clientnum, ci->team, *mode);
+    sendf(!ci->spy ? -1 : ci->ownernum, 1, "riiii", N_SETTEAM, ci->clientnum, ci->team, *mode);
 });
 
 ICOMMAND(s_getteam, "i", (int *cn),
 {
     clientinfo *ci = getinfo(*cn);
-    result(ci ? ci->team : "");
+    result(m_teammode && ci ? teamnames[ci->team] : "");
 });
 
 ICOMMAND(s_listteam, "sbb", (char *team, int *spec, int *bots),
 {
     string cn;
+    int teamnum;
     vector<char> buf;
 
-    loopv(clients) if(!strcmp(clients[i]->team, team))
+    if (m_teammode && ((teamnum = teamnumber(team))))
     {
-        if(clients[i]->state.state==CS_SPECTATOR && *spec <= 0)
-            continue;
-        if(clients[i]->state.aitype!=AI_NONE &&
-            (*bots <= 0 || clients[i]->state.state==CS_SPECTATOR))
+        loopv(clients) if(clients[i]->team == teamnum)
         {
-            continue;
-        }
+            if(clients[i]->state.state==CS_SPECTATOR && *spec <= 0)
+                continue;
+            if(clients[i]->state.aitype!=AI_NONE &&
+                (*bots <= 0 || clients[i]->state.state==CS_SPECTATOR))
+            {
+                continue;
+            }
 
-        if(buf.length()) buf.add(' ');
-        formatstring(cn, "%d", clients[i]->clientnum);
-        buf.put(cn, strlen(cn));
+            if(buf.length()) buf.add(' ');
+            formatstring(cn, "%d", clients[i]->clientnum);
+            buf.put(cn, strlen(cn));
+        }
     }
     buf.add('\0');
     result(buf.getbuf());
@@ -219,25 +222,29 @@ ICOMMAND(s_listteams, "bb", (int *spec, int *bots),
     vector<const char *> teams;
     vector<char> buf;
 
-    loopv(clients)
+    if (m_teammode)
     {
-        const char *team = clients[i]->team;
-        if(!team[0]) continue;
-
-        if(clients[i]->state.state==CS_SPECTATOR && *spec <= 0)
-            continue;
-        if(clients[i]->state.aitype!=AI_NONE &&
-            (*bots <= 0 || clients[i]->state.state==CS_SPECTATOR))
+        loopv(clients)
         {
-            continue;
-        }
+            clientinfo *ci = clients[i];
+            if(!ci->team) continue;
 
-        loopvj(teams) if(!strcmp(teams[j], team)) goto nextteam;
-        teams.add(team);
-        if(buf.length()) buf.add(' ');
-        buf.put(team, strlen(team));
-    nextteam:
-        ;
+            if(ci->state.state==CS_SPECTATOR && *spec <= 0)
+                continue;
+            if(ci->state.aitype!=AI_NONE &&
+                (*bots <= 0 || ci->state.state==CS_SPECTATOR))
+            {
+                continue;
+            }
+
+            const char *teamstr = teamnames[ci->team];
+            loopvj(teams) if(teams[j] == teamstr) goto nextteam;
+            teams.add(teamstr);
+            if(buf.length()) buf.add(' ');
+            buf.put(teamstr, strlen(teamstr));
+        nextteam:
+            ;
+        }
     }
     buf.add('\0');
     result(buf.getbuf());
@@ -246,18 +253,22 @@ ICOMMAND(s_listteams, "bb", (int *spec, int *bots),
 ICOMMAND(s_countteam, "sbb", (char *team, int *spec, int *bots),
 {
     int count = 0;
+    int teamnum;
 
-    loopv(clients) if(!strcmp(clients[i]->team, team))
+    if (m_teammode && ((teamnum = teamnumber(team))))
     {
-        if(clients[i]->state.state==CS_SPECTATOR && *spec <= 0)
-            continue;
-        if(clients[i]->state.aitype!=AI_NONE &&
-            (*bots <= 0 || clients[i]->state.state==CS_SPECTATOR))
+        loopv(clients) if(clients[i]->team == teamnum)
         {
-            continue;
-        }
+            if(clients[i]->state.state==CS_SPECTATOR && *spec <= 0)
+                continue;
+            if(clients[i]->state.aitype!=AI_NONE &&
+                (*bots <= 0 || clients[i]->state.state==CS_SPECTATOR))
+            {
+                continue;
+            }
 
-        ++count;
+            ++count;
+        }
     }
     intret(count);
 });

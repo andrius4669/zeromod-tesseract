@@ -51,23 +51,6 @@ char *tempformatstring(const char *fmt, ...)
     return tmpstr[tmpidx];
 }
 
-////////////////////////// strings ////////////////////////////////////////
-
-static string tmpstr[4];
-static int tmpidx = 0;
-
-char *tempformatstring(const char *fmt, ...)
-{
-    tmpidx = (tmpidx+1)%4;
-
-    va_list v;
-    va_start(v, fmt);
-    vformatstring(tmpstr[tmpidx], fmt, v);
-    va_end(v);
-
-    return tmpstr[tmpidx];
-}
-
 ////////////////////////// rnd numbers ////////////////////////////////////////
 
 #define N (624)

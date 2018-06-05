@@ -163,9 +163,6 @@ struct z_sleepstruct
 extern void z_checksleep();
 
 
-extern void z_setteaminfos(hashset<teaminfo> *&dst, hashset<teaminfo> *src);
-
-
 extern void forcespectator(clientinfo *ci);
 
 extern int showbanreason;

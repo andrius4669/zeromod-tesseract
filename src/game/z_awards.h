@@ -19,24 +19,6 @@ static const char awards_style_normal[] = "\f3Awards: "
                                           "\f6Acc: %A \f2(\f6%a%%\f2) "
                                           "\f6Damage: %D \f2(\f6%d\f2)";
 
-static const char awards_style_protect[] =  "\f3Awards: "
-                                            "\f6Kills: %F \f2(\f6%f\f2) "
-                                            "\f6KpD: %P \f2(\f6%p\f2) "
-                                            "\f6Acc: %A \f2(\f6%a%%\f2) "
-                                            "\f6Damage: %D \f2(\f6%d\f2)\n"
-                                            "\f3Flags: "
-                                            "\f6Scored: %G \f2(\f6%g\f2) "
-                                            "\f6Flag guardian: %E \f2(\f6%e sec\f2)";
-
-static const char awards_style_hold[] = "\f3Awards: "
-                                        "\f6Kills: %F \f2(\f6%f\f2) "
-                                        "\f6KpD: %P \f2(\f6%p\f2) "
-                                        "\f6Acc: %A \f2(\f6%a%%\f2) "
-                                        "\f6Damage: %D \f2(\f6%d\f2)\n"
-                                        "\f3Flags: "
-                                        "\f6Scored: %G \f2(\f6%g\f2) "
-                                        "\f6Taken: %O \f2(\f6%o\f2)";
-
 static const char awards_style_ctf[] =  "\f3Awards: "
                                         "\f6Kills: %F \f2(\f6%f\f2) "
                                         "\f6KpD: %P \f2(\f6%p\f2) "
@@ -47,24 +29,6 @@ static const char awards_style_ctf[] =  "\f3Awards: "
                                         "\f6Stolen: %O \f2(\f6%o\f2) "
                                         "\f6Returned: %E \f2(\f6%e\f2)";
 
-static const char awards_style_collect[] =  "\f3Awards: "
-                                            "\f6Kills: %F \f2(\f6%f\f2) "
-                                            "\f6KpD: %P \f2(\f6%p\f2) "
-                                            "\f6Acc: %A \f2(\f6%a%%\f2) "
-                                            "\f6Damage: %D \f2(\f6%d\f2)\n"
-                                            "\f3Skulls: "
-                                            "\f6Scored: %G \f2(\f6%g\f2) "
-                                            "\f6Stolen: %O \f2(\f6%o\f2) "
-                                            "\f6Returned: %E \f2(\f6%e\f2)";
-
-static const char awards_style_capture[] =  "\f3Awards: "
-                                            "\f6Kills: %F \f2(\f6%f\f2) "
-                                            "\f6KpD: %P \f2(\f6%p\f2) "
-                                            "\f6Acc: %A \f2(\f6%a%%\f2) "
-                                            "\f6Damage: %D \f2(\f6%d\f2)\n"
-                                            "\f3Bases: "
-                                            "\f6Capture leader: %C \f2(\f6%c sec\f2) "
-                                            "\f6Defense dude: %G \f2(\f6%g sec\f2)";
 
 struct z_statsstyle
 {
@@ -193,14 +157,7 @@ static inline const char *z_pickawardstemplate()
         if(!awards_fallback) return NULL;
     }
     // some default hardcoded templates
-    if(m_ctf)
-    {
-        if(m_protect) return awards_style_protect;
-        else if(m_hold) return awards_style_hold;
-        else return awards_style_ctf;
-    }
-    else if(m_collect) return awards_style_collect;
-    else if(m_capture) return awards_style_capture;
+    if(m_ctf) return awards_style_ctf;
     else if(m_edit) return NULL;
     else return awards_style_normal;
 }
@@ -426,7 +383,7 @@ static inline void z_putstats(char (&msg)[MAXSTRLEN], clientinfo *ci)
         return;
     }
 
-    gamestate &gs = ci->state;
+    servstate &gs = ci->state;
 
     int p = gs.frags*1000/max(gs.deaths, 1);
     string ps;

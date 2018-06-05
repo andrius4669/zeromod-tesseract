@@ -207,7 +207,7 @@ namespace server
             stolen = gs.stolen;
             returned = gs.returned;
             maxstreak = gs.maxstreak;
-            z_setteaminfos(teaminfos, gs.teaminfos);
+            loopi(MAXTEAMS) teaminfos[i] = gs.teaminfos[i];
             hits = gs.hits;
             misses = gs.misses;
             shots = gs.shots;
@@ -228,7 +228,7 @@ namespace server
             gs.stolen = stolen;
             gs.returned = returned;
             gs.maxstreak = maxstreak;
-            z_setteaminfos(gs.teaminfos, teaminfos);
+            loopi(MAXTEAMS) teaminfos[i] = gs.teaminfos[i];
             gs.hits = hits;
             gs.misses = misses;
             gs.shots = shots;
@@ -2324,7 +2324,7 @@ namespace server
         }
         if(z_shouldblockgameplay(ci)) return;
         if(ci->xi.slay) { suicide(ci); return; }
-        gs.explosivedamage += guns[gun].damage;
+        gs.explosivedamage += attacks[atk].damage;
         sendf(-1, 1, "ri4x", N_EXPLODEFX, ci->clientnum, atk, id, ci->ownernum);
         loopv(hits)
         {
@@ -3890,6 +3890,7 @@ namespace server
                 // discard everything
                 getstring(text, p); // playername
                 (void) getint(p); // playermodel
+                (void) getint(p); // playercolor
                 getstring(text, p); // hashed password
                 getstring(text, p); // authdesc
                 getstring(text, p); // authname

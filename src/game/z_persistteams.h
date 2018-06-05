@@ -74,7 +74,7 @@ static void autoteam()
         loopvj(team[i])
         {
             clientinfo *ci = team[i][j];
-            if(ci->team == 1+i)) continue;
+            if(ci->team == 1+i) continue;
             ci->team = 1+i;
             sendf(-1, 1, "riiii", N_SETTEAM, ci->clientnum, ci->team, -1);
         }
